@@ -7,15 +7,11 @@ An iroh endpoint running on an ESP32-S3 **with** PSRAM. Like the
 it enough RAM for the full feature set — **relay + pkarr discovery** — so it is
 reachable internet-wide (not just LAN-direct like the no-PSRAM S3 build).
 
-It targets `xtensa-esp32s3-espidf` (ESP32-S3 / LX7) and uses **published iroh**
-(crates.io `1.0.2`) — no git branch, no `[patch]`. That keeps hickory-resolver in
-the graph (compiled but never run — `src/std_dns_resolver.rs` swaps it out at
-runtime), which the S3's flash and SRAM comfortably absorb.
+It targets `xtensa-esp32s3-espidf` and uses published iroh 1.2.0, without
+an iroh Git dependency or patch. Hickory is no longer in the dependency graph;
+the application still uses its system DNS adapter.
 
-> **Needs a ≥8 MB-flash board.** The app is ~4.35 MB, so it won't fit a **4 MB**
-> S3 (N4R2 / N4R8). 8 MB (N8R2 / N8R8) or 16 MB (N16R8) is required — see the
-> `CONFIG_ESPTOOLPY_FLASHSIZE_8MB` floor in `sdkconfig.defaults`. On a 4 MB S3+PSRAM
-> board, use a slimmed iroh build (relay/hickory removed) instead.
+See the [release size measurements](../RELEASE-SIZES.md) for flash requirements.
 
 This variant is configured for **octal (8MB) PSRAM** (`CONFIG_SPIRAM_MODE_OCT`,
 e.g. an ESP32-S3-WROOM-1-N16R8). For a quad/2MB board (N8R2) drop the

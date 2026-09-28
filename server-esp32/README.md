@@ -6,8 +6,8 @@ An iroh endpoint running on a plain ESP32 (LX6) **without** PSRAM. It is tuned
 to keep the memory footprint low — smaller buffers and avoiding allocations —
 so that it fits in the on-chip RAM.
 
-It targets `xtensa-esp32-espidf` (ESP32 / LX6) and depends on the
-`esp32-no-spiram` iroh branch. The `alloc_log` module helps track allocations
+It targets `xtensa-esp32-espidf` (ESP32 / LX6) and uses published
+iroh 1.2.0. The `alloc_log` module helps track allocations
 while keeping the footprint down.
 
 > ⚠️ **This variant runs right at the memory limit.** It is the "look, we can

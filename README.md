@@ -9,8 +9,7 @@ ESP32 — plus two **clients** to dial them.
 Each keeps the largest configuration that runs *reliably* on that board:
 
 - [`server-esp32-psram/`](server-esp32-psram/README.md) — ESP32-WROVER / M5StickC
-  (LX6) **with PSRAM**. Enough RAM for **relay + pkarr discovery** (custom iroh
-  branch).
+  (LX6) **with PSRAM**. Enough RAM for **relay + pkarr discovery** (published iroh).
 - [`server-esp32-s3-psram/`](server-esp32-s3-psram/README.md) — ESP32-S3
   **with PSRAM**. Also gets **relay + pkarr discovery** (same full build, S3
   hardware).
@@ -80,7 +79,9 @@ We do support both CPU architectures, XTensa for ESP32 and ESP32-S3, RISC-V for 
 
 ### Flash size
 
-If your board has a flash memory size of less than 8 MiB, you will need a special branch of iroh with reduced dependencies for now.
+All ESP32 server variants use published iroh 1.2.0, with no Hickory dependency
+or iroh Git patches. See [release size measurements](RELEASE-SIZES.md) for the
+4 MiB flash comparison. Flash capacity does not establish runtime RAM headroom.
 
 ### PSRAM
 
