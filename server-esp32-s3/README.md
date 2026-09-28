@@ -11,7 +11,8 @@ an iroh Git dependency or patch. It remains LAN-direct (relay disabled) to limit
 RAM usage. The system DNS adapter and allocation-profiling helper are retained.
 Hickory is no longer in the dependency graph.
 
-See the [release size measurements](../RELEASE-SIZES.md) for flash requirements.
+The release application fits a 4 MiB single-app flash layout. The existing
+flash configuration is unchanged.
 
 ## Build / run
 

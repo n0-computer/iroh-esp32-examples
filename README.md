@@ -80,8 +80,8 @@ We do support both CPU architectures, XTensa for ESP32 and ESP32-S3, RISC-V for 
 ### Flash size
 
 All ESP32 server variants use published iroh 1.2.0, with no Hickory dependency
-or iroh Git patches. See [release size measurements](RELEASE-SIZES.md) for the
-4 MiB flash comparison. Flash capacity does not establish runtime RAM headroom.
+or iroh Git patches. All seven release applications fit a 4 MiB single-app
+flash layout. Flash capacity does not establish runtime RAM headroom.
 
 ### PSRAM
 

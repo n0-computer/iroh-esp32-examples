@@ -11,7 +11,8 @@ It targets `xtensa-esp32s3-espidf` and uses published iroh 1.2.0, without
 an iroh Git dependency or patch. Hickory is no longer in the dependency graph;
 the application still uses its system DNS adapter.
 
-See the [release size measurements](../RELEASE-SIZES.md) for flash requirements.
+The release application fits a 4 MiB single-app flash layout. The existing
+flash configuration is unchanged.
 
 This variant is configured for **octal (8MB) PSRAM** (`CONFIG_SPIRAM_MODE_OCT`,
 e.g. an ESP32-S3-WROOM-1-N16R8). For a quad/2MB board (N8R2) drop the
