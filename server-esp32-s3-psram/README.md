@@ -7,9 +7,7 @@ An iroh endpoint running on an ESP32-S3 **with** PSRAM. Like the
 it enough RAM for the full feature set — **relay + pkarr discovery** — so it is
 reachable internet-wide (not just LAN-direct like the no-PSRAM S3 build).
 
-It targets `xtensa-esp32s3-espidf` and uses published iroh 1.2.0, without
-an iroh Git dependency or patch. Hickory is no longer in the dependency graph;
-the application still uses its system DNS adapter.
+It targets `xtensa-esp32s3-espidf`.
 
 The release application fits a 4 MiB single-app flash layout. The existing
 flash configuration is unchanged.

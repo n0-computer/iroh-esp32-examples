@@ -4,8 +4,7 @@ An iroh endpoint running on an ESP32-C61 — a single-core 32-bit **RISC-V**
 (RV32IMAC) chip with WiFi 6 and a **2 MB SPI PSRAM** (module marking `…N8R2`:
 8 MB flash, 2 MB PSRAM). It targets `riscv32imac-esp-espidf` like the
 [`server-esp32-c6`](../server-esp32-c6/README.md), and uses the PSRAM to run the
-**full relay + pkarr discovery** stack (published iroh 1.2.0, as on the
-S3/ESP32 PSRAM targets).
+**full relay + pkarr discovery** stack, as on the S3/ESP32 PSRAM targets.
 
 That makes it reachable **across networks**: it publishes to pkarr and falls back
 to a relay for NAT traversal, so a peer dials the **short ticket** (bare endpoint
@@ -35,9 +34,7 @@ The C61 is newer silicon than the rest of this repo, so it needs more recent too
 - **`.cargo/config.toml`** — `MCU=esp32c61` (was `esp32c6`) and
   `ESP_IDF_VERSION=v5.5.4` (was `v5.3.3`). The rust target
   `riscv32imac-esp-espidf` is unchanged — the C61 is RV32IMAC like the C6/C5/H2.
-- **`Cargo.toml`** — package/bin renamed; `esp-idf-svc` bumped `0.51 → 0.52`; and
-  `iroh` / `iroh-relay` / `iroh-base` now come from crates.io (1.2.0),
-  with full relay + pkarr enabled in the application.
+- **`Cargo.toml`** — package/bin renamed; `esp-idf-svc` bumped `0.51 → 0.52`.
 - **`src/main.rs`** — `relay_mode(Default)` + two `address_lookup(Pkarr…)` calls,
   and it prints the **short ticket** too. Otherwise unchanged from the C6.
 - **`sdkconfig.defaults`** — PSRAM on (chip-independent `CONFIG_SPIRAM`, **QUAD** —
@@ -65,7 +62,7 @@ resource — **internal SRAM** (~320 KB on the C61 vs 512 KB on the S3/ESP32, le
   reqwest/rustls DoH clients — overflowed 49 KB (a stack-protection fault in
   `RelayActor::active_relay_handle`, SP ~8.7 KB past the floor). 96 KB clears it.
   Note the S3/ESP32 use 114 KB, but that was sized for `hickory-resolver`, which
-  published iroh no longer depends on — so we don't need the extra.
+  iroh no longer depends on — so we don't need the extra.
 
 The tension: that 96 KB stack is **internal** SRAM (the RISC-V main task stack
 isn't eligible for PSRAM), so it competes with the very FreeRTOS/DMA allocations

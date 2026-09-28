@@ -9,7 +9,7 @@ ESP32 — plus two **clients** to dial them.
 Each keeps the largest configuration that runs *reliably* on that board:
 
 - [`server-esp32-psram/`](server-esp32-psram/README.md) — ESP32-WROVER / M5StickC
-  (LX6) **with PSRAM**. Enough RAM for **relay + pkarr discovery** (published iroh).
+  (LX6) **with PSRAM**. Enough RAM for **relay + pkarr discovery**.
 - [`server-esp32-s3-psram/`](server-esp32-s3-psram/README.md) — ESP32-S3
   **with PSRAM**. Also gets **relay + pkarr discovery** (same full build, S3
   hardware).
@@ -33,7 +33,7 @@ Each keeps the largest configuration that runs *reliably* on that board:
 
 ## Clients
 
-- [`client/`](client/README.md) — desktop CLI client (stock crates.io iroh + `ring`).
+- [`client/`](client/README.md) — desktop CLI client.
 - [`wasm-gui/`](wasm-gui/README.md) — browser echo client (Rust → WebAssembly).
   Relay-only, so it talks to a PSRAM server (`server-esp32-psram` or
   `server-esp32-s3-psram`).
@@ -79,9 +79,7 @@ We do support both CPU architectures, XTensa for ESP32 and ESP32-S3, RISC-V for 
 
 ### Flash size
 
-All ESP32 server variants use published iroh 1.2.0, with no Hickory dependency
-or iroh Git patches. All seven release applications fit a 4 MiB single-app
-flash layout. Flash capacity does not establish runtime RAM headroom.
+All seven release applications fit a 4 MiB single-app flash layout. Flash capacity does not establish runtime RAM headroom.
 
 ### PSRAM
 

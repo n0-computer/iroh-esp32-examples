@@ -6,10 +6,8 @@ An iroh endpoint running on an ESP32-S3 **without** PSRAM. It is tuned to keep t
 memory footprint low — smaller buffers and avoiding allocations — so that it
 fits in the on-chip RAM.
 
-It targets `xtensa-esp32s3-espidf` and uses published iroh 1.2.0, without
-an iroh Git dependency or patch. It remains LAN-direct (relay disabled) to limit
-RAM usage. The system DNS adapter and allocation-profiling helper are retained.
-Hickory is no longer in the dependency graph.
+It targets `xtensa-esp32s3-espidf` and is LAN-direct (relay disabled) to limit
+RAM usage.
 
 The release application fits a 4 MiB single-app flash layout. The existing
 flash configuration is unchanged.

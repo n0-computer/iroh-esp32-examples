@@ -6,8 +6,7 @@ An iroh endpoint running on an ESP32 with PSRAM. Use this variant for boards
 that have PSRAM (PSRAM), e.g. an ESP32-WROVER that is frequently included in
 ESP32 dev kits, or the M5StickC PLUS2.
 
-It targets `xtensa-esp32-espidf` (ESP32 / LX6) and uses published iroh 1.2.0
-from crates.io.
+It targets `xtensa-esp32-espidf` (ESP32 / LX6).
 
 ## Build / run
 
