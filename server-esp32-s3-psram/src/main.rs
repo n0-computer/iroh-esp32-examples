@@ -35,17 +35,6 @@ fn parse_secret_key() -> Option<SecretKey> {
     )
 }
 
-// ESP-IDF doesn't provide gethostname, but resolv_conf (via hickory-resolver) references it.
-#[no_mangle]
-unsafe extern "C" fn gethostname(name: *mut core::ffi::c_char, len: usize) -> core::ffi::c_int {
-    if len > 0 && !name.is_null() {
-        unsafe {
-            *name = 0;
-        }
-    }
-    0
-}
-
 fn connect_wifi() -> (BlockingWifi<EspWifi<'static>>, std::net::Ipv4Addr) {
     let (ssid, password) = WIFI_CONFIG
         .split_once(':')

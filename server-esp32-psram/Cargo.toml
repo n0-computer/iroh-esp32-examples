@@ -41,8 +41,8 @@ experimental = ["esp-idf-svc/experimental"]
 [dependencies]
 log = "0.4"
 esp-idf-svc = "0.51"
-iroh = { git = "https://github.com/n0-computer/iroh", branch = "refactor-hickory", default-features = false }
-iroh-relay = { git = "https://github.com/n0-computer/iroh", branch = "refactor-hickory", default-features = false }
+iroh = { version = "1.2.0", default-features = false }
+iroh-relay = { version = "1.2.0", default-features = false }
 iroh-tickets = "1.0.0"
 tokio = { version = "1", features = ["rt"] }
 rustls-rustcrypto = { git = "https://github.com/n0-computer/rustls-rustcrypto", branch = "feature-flag-algorithms-v0.0.2", default-features = false, features = ["std", "p256"] }
@@ -71,8 +71,3 @@ n0-future = "0.3"
 
 [build-dependencies]
 embuild = "0.33"
-
-[patch.crates-io]
-# iroh-base: unify the copy used by iroh (this branch) and iroh-tickets (crates.io).
-iroh-base = { git = "https://github.com/n0-computer/iroh", branch = "refactor-hickory" }
-# netwatch esp-idf support (posix_minimal) is upstreamed in 0.19 — no patch needed.

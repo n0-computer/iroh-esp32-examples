@@ -6,15 +6,11 @@ An iroh endpoint running on an ESP32-S3 **without** PSRAM. It is tuned to keep t
 memory footprint low — smaller buffers and avoiding allocations — so that it
 fits in the on-chip RAM.
 
-It targets `xtensa-esp32s3-espidf` (ESP32-S3) and uses **published iroh** (crates.io
-`1.0.2`) — no git branch, no `[patch]`. It stays **LAN-direct** (relay disabled) to
-fit the on-chip RAM: the relay/discovery machinery and hickory-resolver are compiled
-but never run (hickory is swapped out at runtime by `src/std_dns_resolver.rs`). The
-`alloc_log` module helps track allocations while keeping the footprint down.
+It targets `xtensa-esp32s3-espidf` and is LAN-direct (relay disabled) to limit
+RAM usage.
 
-> **Needs a ≥8 MB-flash board.** Published iroh + hickory makes the app ~4.0 MB, so a
-> 4 MB S3 (N4) won't fit — use an 8 MB board (N8). See the
-> `CONFIG_ESPTOOLPY_FLASHSIZE_8MB` floor in `sdkconfig.defaults`.
+The release application fits a 4 MiB single-app flash layout. The existing
+flash configuration is unchanged.
 
 ## Build / run
 

@@ -6,9 +6,8 @@ An iroh endpoint running on an ESP32-C6 — a single-core 32-bit **RISC-V**
 from Xtensa to RISC-V: the application code is identical (it's chip-agnostic —
 just NVS + WiFi + iroh), so the port is **config only**.
 
-It targets `riscv32imac-esp-espidf` and depends on the same `esp32-no-spiram` iroh
-branch. Like the bare ESP32, the whole iroh heap and every task stack must fit in
-internal SRAM (the C6 has ~512 KB), so it keeps the no-psram memory tuning.
+It targets `riscv32imac-esp-espidf`. Like the bare ESP32, the whole iroh heap
+and every task stack must fit in internal SRAM (the C6 has ~512 KB), so it keeps the no-psram memory tuning.
 
 > ⚠️ Same caveat as the bare ESP32: this runs near the memory floor and is
 > **LAN-direct only** (relay + discovery are removed — dial via the long ticket).
@@ -25,8 +24,8 @@ internal SRAM (the C6 has ~512 KB), so it keeps the no-psram memory tuning.
   `CONFIG_ESP32_SPIRAM_*` symbols are ESP32-only and don't exist for the C6 (no
   PSRAM interface). Everything else (WiFi/lwIP/stack cuts) is chip-independent and
   carries over unchanged.
-- **`Cargo.toml`** — package/bin renamed to `server-esp32-c6`. Dependencies,
-  features, and the `esp32-no-spiram` iroh branch are untouched.
+- **`Cargo.toml`** — package/bin renamed to `server-esp32-c6`. Dependencies and
+  features match the bare ESP32.
 - **`rust-toolchain.toml`** — unchanged (`channel = "esp"`). The espup `esp`
   toolchain builds the RISC-V esp target too; stock `nightly` + `rust-src` also
   works if you prefer.

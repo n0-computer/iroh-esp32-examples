@@ -44,8 +44,8 @@ log = "0.4"
 # the ESP32-C61. 0.51 / esp-idf-sys 0.36 has no such Chip variant and fails at
 # chip detection for MCU="esp32c61".
 esp-idf-svc = "0.52"
-iroh = { git = "https://github.com/n0-computer/iroh", branch = "refactor-hickory", default-features = false }
-iroh-relay = { git = "https://github.com/n0-computer/iroh", branch = "refactor-hickory", default-features = false }
+iroh = { version = "1.2.0", default-features = false }
+iroh-relay = { version = "1.2.0", default-features = false }
 iroh-tickets = "1.0.0"
 tokio = { version = "1", features = ["rt"] }
 rustls-rustcrypto = { git = "https://github.com/n0-computer/rustls-rustcrypto", branch = "feature-flag-algorithms-v0.0.2", default-features = false, features = ["std", "p256"] }
@@ -85,8 +85,3 @@ remote_component = { name = "espressif/esp_wifi_remote", version = "*" }
 
 [[package.metadata.esp-idf-sys.extra_components]]
 remote_component = { name = "espressif/esp_hosted", version = "*" }
-
-[patch.crates-io]
-# Unify iroh-base between the git iroh (refactor-hickory) and crates.io iroh-tickets.
-iroh-base = { git = "https://github.com/n0-computer/iroh", branch = "refactor-hickory" }
-# netwatch esp-idf support (posix_minimal) is upstreamed in 0.19 — no patch needed.
