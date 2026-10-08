@@ -41,8 +41,8 @@ experimental = ["esp-idf-svc/experimental"]
 [dependencies]
 log = "0.4"
 esp-idf-svc = "0.51"
-iroh = { version = "1.2.0", default-features = false }
-iroh-relay = { version = "1.2.0", default-features = false }
+iroh = { version = "1.3.0", default-features = false }
+iroh-relay = { version = "1.3.0", default-features = false }
 iroh-tickets = "1.0.0"
 tokio = { version = "1", features = ["rt"] }
 rustls-rustcrypto = { git = "https://github.com/n0-computer/rustls-rustcrypto", branch = "feature-flag-algorithms-v0.0.2", default-features = false, features = ["std", "p256"] }

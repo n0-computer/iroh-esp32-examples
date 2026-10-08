@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 # iroh from crates.io — proves the ESP32 server works with stock iroh
 
 [dependencies]
-iroh = "1.0.0"
+iroh = "1.3.0"
 iroh-tickets = "1.0.0"
 # mDNS local discovery. Native target (ring + working SO_REUSEPORT), so the stock
 # crates.io release works unpatched — no [patch] needed, unlike the ESP32 servers.
