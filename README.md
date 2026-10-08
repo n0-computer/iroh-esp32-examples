@@ -31,6 +31,13 @@ Each keeps the largest configuration that runs *reliably* on that board:
   the roomiest iroh node in this repo. Tested on a Waveshare ESP32-P4-NANO.
   Same newer tooling as the C61; mind its README's **chip-revision trap**.
 
+## noq interop
+
+- [`noq-interop/`](noq-interop/README.md) — an ESP32-C6 echo server that runs
+  bare [noq](https://docs.rs/noq) QUIC (no iroh endpoint) with iroh's
+  raw-public-key TLS profile, so iroh endpoints can dial it via a long ticket.
+  Its app image is 1.69 MiB.
+
 ## Clients
 
 - [`client/`](client/README.md) — desktop CLI client.
