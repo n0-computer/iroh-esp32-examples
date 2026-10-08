@@ -34,7 +34,7 @@ ticket it prints. They add about 2.5 KB.
 | build | app image |
 | --- | ---: |
 | `noq-esp32-c6` (this) | 1,772,608 bytes (1.69 MiB) |
-| [`server-esp32-c6`][iroh-c6] (full iroh 1.2, LAN-direct) | 3,898,800 bytes (3.72 MiB) |
+| [`server-esp32-c6`][iroh-c6] (full iroh 1.3, LAN-direct) | 3,908,144 bytes (3.73 MiB) |
 
 Both use the same release profile: LTO, `codegen-units = 1`, `opt-level = "s"`,
 `panic = "abort"`, std rebuilt with `optimize_for_size`. The biggest pieces are
