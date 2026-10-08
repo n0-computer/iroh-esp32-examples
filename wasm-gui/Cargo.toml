@@ -22,7 +22,7 @@ wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1.7"
 # iroh in the browser: ring TLS works on wasm32 (unlike the xtensa ESP32 targets).
 # Browsers can't open UDP/QUIC sockets, so this endpoint reaches peers via a relay.
-iroh = { version = "1.0.0", default-features = false, features = ["tls-ring"] }
+iroh = { version = "1.3.0", default-features = false, features = ["tls-ring"] }
 # Endpoint tickets — the same string the CLI client and ESP32 servers use. Carries
 # the relay URL, which is how the relay-only browser reaches a PSRAM ESP32.
 iroh-tickets = "1.0.0"
