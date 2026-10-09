@@ -1,0 +1,59 @@
+# SHIPPING-BUILD OPTION: uncomment this line together with `panic = "immediate-abort"`
+# below and `build-std = ["std"]` in .cargo/config.toml to drop the panic-message
+# machinery. Cost: zero panic diagnostics on serial — only do this once development is done.
+# cargo-features = ["panic-immediate-abort"]
+
+[package]
+name = "noq-esp32-c6"
+version = "0.1.0"
+authors = ["Ruediger Klaehn <rklaehn@protonmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+resolver = "2"
+rust-version = "1.77"
+
+[[bin]]
+name = "noq-esp32-c6"
+harness = false # do not use the built-in cargo test harness -> resolve rust-analyzer errors
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+# SHIPPING-BUILD OPTION: swap the line above for `panic = "immediate-abort"` (and enable
+# the cargo-features line at the top of this file + set build-std = ["std"] in
+# .cargo/config.toml).
+# panic = "immediate-abort"
+
+[profile.dev]
+debug = true    # Symbols are nice, and they don't increase the size on Flash
+opt-level = "z"
+lto = true
+codegen-units = 1
+
+[dependencies]
+log = "0.4"
+esp-idf-svc = "0.51"
+tokio = { version = "1", features = ["rt", "net", "time"] }
+# Plain QUIC, no iroh. No default features: that drops ring (which doesn't build for
+# esp) and the platform verifier. We bring our own crypto provider, HMAC reset key and
+# handshake-token key instead.
+noq = { version = "1.3.0", default-features = false, features = ["rustls", "runtime-tokio"] }
+rustls = { version = "0.23", default-features = false, features = ["std"] }
+rustls-rustcrypto = { git = "https://github.com/n0-computer/rustls-rustcrypto", branch = "feature-flag-algorithms-v0.0.2", default-features = false, features = ["std"] }
+# iroh's key/address/ticket *types* only (no networking): SecretKey/PublicKey for the
+# TLS identity, EndpointAddr + EndpointTicket for the long ticket. ed25519-dalek 3 is
+# shared with rustls-rustcrypto.
+iroh-base = { version = "1.3.0", default-features = false, features = ["key"] }
+iroh-tickets = "1.0.0"
+# Same major versions rustls-rustcrypto already pulls in, so these add no new code.
+hmac = "0.13"
+sha2 = { version = "0.11", default-features = false }
+getrandom = "0.4"
+# QUIC packet protection (shared with noq-proto's own aes-gcm dependency).
+aes = "0.8"
+aes-gcm = "0.10"
+
+[build-dependencies]
+embuild = "0.33"
