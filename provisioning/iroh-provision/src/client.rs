@@ -20,18 +20,18 @@ use iroh_base::PublicKey;
 use n0_error::{e, stack_error, AnyError, StackError};
 
 use crate::protocol::{
-    seal, Credentials, Error, Failure, Message, Network, PairingSecret, PairingTicket,
-    Provisioning, Status,
+    seal, Credentials, DeviceInfo, Error, Failure, Hello, Message, Network, PairingSecret,
+    PairingTicket, Provisioning, Status,
 };
 
-/// How a [`Session`] talks to one device. For BLE, these map to the identity,
+/// How a [`Session`] talks to one device. For BLE, these map to the info,
 /// credentials and status characteristics.
 #[allow(async_fn_in_trait)]
 pub trait Transport {
     type Error: StackError + 'static;
 
-    /// The device's 32 byte ed25519 public key.
-    async fn read_identity(&mut self) -> Result<[u8; 32], Self::Error>;
+    /// The encoded [`Hello`]: the device's endpoint id and [`DeviceInfo`].
+    async fn read_hello(&mut self) -> Result<Vec<u8>, Self::Error>;
 
     /// Send a sealed message. Statuses from before this call must not be
     /// returned by [`Transport::next_status`] afterwards: a stale `Failed` would
@@ -79,17 +79,19 @@ fn transport_error(err: impl StackError + 'static) -> ProvisionError {
 pub struct Session<T> {
     transport: T,
     endpoint: PublicKey,
+    info: DeviceInfo,
 }
 
 impl<T: Transport> Session<T> {
-    /// Read the device's identity.
+    /// Read the device's endpoint id and info.
     pub async fn connect(mut transport: T) -> Result<Self, ProvisionError> {
-        let identity = transport.read_identity().await.map_err(transport_error)?;
-        let endpoint = PublicKey::from_bytes(&identity)
-            .map_err(|_| e!(ProvisionError::Invalid, e!(Error::InvalidIdentity)))?;
+        let bytes = transport.read_hello().await.map_err(transport_error)?;
+        let Hello { endpoint, info } = Hello::decode(&bytes)
+            .ok_or_else(|| e!(ProvisionError::Invalid, e!(Error::InvalidIdentity)))?;
         Ok(Self {
             transport,
             endpoint,
+            info,
         })
     }
 
@@ -97,6 +99,11 @@ impl<T: Transport> Session<T> {
     /// rule out someone impersonating it.
     pub fn endpoint(&self) -> PublicKey {
         self.endpoint
+    }
+
+    /// What the device says about itself, e.g. its kind.
+    pub fn info(&self) -> &DeviceInfo {
+        &self.info
     }
 
     /// Seal the networks, the name and a fresh pairing secret to the device,

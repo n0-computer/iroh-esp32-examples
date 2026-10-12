@@ -147,6 +147,18 @@ function ticketElement(ticket) {
   return div;
 }
 
+/** The first `<kind>-<n>` not taken by a known device or one on this page. */
+function suggestName(kind) {
+  if (!kind) return undefined;
+  const taken = new Set([
+    ...Object.values(loadKnown()).map((d) => d.name),
+    ...[...rows.values()].map((row) => row.name),
+  ]);
+  let n = 1;
+  while (taken.has(`${kind}-${n}`)) n++;
+  return `${kind}-${n}`;
+}
+
 /**
  * Count up a number after a separator: "lamp-1" -> "lamp-2", "desk 09" ->
  * "desk 10". Other names stay: in "co2" the digit is part of the name.
@@ -243,7 +255,7 @@ async function provisionDevice() {
 
   // A known device keeps its name and ticket: only the networks change. A new
   // one gets the typed name (counting up, so the next device gets the next
-  // number), or its BLE name.
+  // number), or one after its kind: co2-1, co2-2, ...
   const known = loadKnown()[id];
   let name;
   if (known?.ticket) {
@@ -251,7 +263,7 @@ async function provisionDevice() {
   } else {
     const typed = $nextName.value.trim();
     if (typed) $nextName.value = nextName(typed);
-    name = typed || device.ble_name;
+    name = typed || suggestName(device.kind) || device.ble_name;
   }
   row.setName(name);
   row.showTicket(known?.ticket);

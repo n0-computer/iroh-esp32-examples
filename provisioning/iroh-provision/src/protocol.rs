@@ -8,13 +8,13 @@ use n0_error::{e, stack_error};
 use serde::{Deserialize, Serialize};
 
 pub const SERVICE_UUID: &str = "08c6b3c5-8a57-40af-8eec-45a746f70d3f";
-pub const IDENTITY_UUID: &str = "18969798-f386-44a1-94bc-e1d98ae283bf";
 pub const CREDENTIALS_UUID: &str = "bca33919-6200-4574-9c7d-04d5b20237f9";
 pub const STATUS_UUID: &str = "2484ca31-949d-4bbe-a7b0-b2f4016532f6";
+pub const INFO_UUID: &str = "9af58d10-e910-46c8-a61d-26fc1d9ae236";
 
-/// Prefix of the BLE device name; the device appends iroh's short form of its
-/// endpoint id, so several boards in one room can be told apart.
-const NAME_PREFIX: &str = "iroh-";
+/// The longest [`DeviceInfo::kind`]: keeps the BLE name (kind + `-` + 10 hex
+/// digits) within the 29 bytes a scan response has for it.
+pub const MAX_KIND_LEN: usize = 12;
 
 /// Version byte at the start of a sealed message, outside the encryption.
 const VERSION: u8 = 1;
@@ -365,9 +365,50 @@ impl Status {
     }
 }
 
-/// The BLE device name for an identity, e.g. `iroh-1a2b3c4d5e`.
-pub fn device_name(identity: &PublicKey) -> String {
-    format!("{NAME_PREFIX}{}", identity.fmt_short())
+/// What a device says about itself, besides its identity.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    /// What kind of device this is, e.g. `co2` or `lamp`: a short, lowercase
+    /// word, used in its BLE name and to suggest names (`co2-1`, `co2-2`, ...).
+    pub kind: String,
+}
+
+/// The info characteristic: the device's endpoint id and its [`DeviceInfo`].
+///
+/// To stay compatible, new fields are only ever appended (to [`DeviceInfo`]):
+/// [`Hello::decode`] ignores trailing bytes, so older clients read newer
+/// devices.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Hello {
+    pub endpoint: PublicKey,
+    pub info: DeviceInfo,
+}
+
+impl Hello {
+    pub fn encode(&self) -> Vec<u8> {
+        postcard::to_allocvec(self).expect("serializing to a Vec can't fail")
+    }
+
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        postcard::take_from_bytes(bytes)
+            .ok()
+            .map(|(hello, _rest)| hello)
+    }
+}
+
+/// The BLE device name, e.g. `co2-1a2b3c4d5e`: the kind (truncated to
+/// [`MAX_KIND_LEN`], `iroh` if empty) and iroh's short form of the endpoint id,
+/// so several boards in one room can be told apart.
+pub fn device_name(identity: &PublicKey, kind: &str) -> String {
+    let mut kind = if kind.is_empty() { "iroh" } else { kind };
+    while kind.len() > MAX_KIND_LEN {
+        let mut end = MAX_KIND_LEN;
+        while !kind.is_char_boundary(end) {
+            end -= 1;
+        }
+        kind = &kind[..end];
+    }
+    format!("{kind}-{}", identity.fmt_short())
 }
 
 #[cfg(test)]
@@ -560,8 +601,27 @@ mod tests {
     #[test]
     fn names() {
         let id = key(1).public();
-        let name = device_name(&id);
-        assert_eq!(name.len(), NAME_PREFIX.len() + 10);
-        assert!(id.to_string().starts_with(&name[NAME_PREFIX.len()..]));
+        let name = device_name(&id, "co2");
+        assert_eq!(name.len(), 4 + 10);
+        assert!(name.starts_with("co2-"));
+        assert!(id.to_string().starts_with(&name[4..]));
+        assert!(device_name(&id, "").starts_with("iroh-"));
+        let long = device_name(&id, "averyveryverylongkind");
+        assert!(long.len() <= 29);
+    }
+
+    #[test]
+    fn hello_ignores_appended_fields() {
+        let hello = Hello {
+            endpoint: key(1).public(),
+            info: DeviceInfo { kind: "co2".into() },
+        };
+        let mut bytes = hello.encode();
+        // endpoint id, then the kind with its length.
+        assert_eq!(bytes.len(), 32 + 1 + 3);
+        assert_eq!(Hello::decode(&bytes), Some(hello.clone()));
+        // A newer device appends a field; this version still reads the rest.
+        bytes.extend_from_slice(&[3, 1, 2, 3]);
+        assert_eq!(Hello::decode(&bytes), Some(hello));
     }
 }

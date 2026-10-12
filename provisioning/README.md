@@ -32,8 +32,9 @@ strongest one in range, retrying until one works, and later rejoins whichever
 is available when the connection drops; it never goes back to provisioning
 mode by itself. Without networks (first boot, or after holding BOOT for 5
 seconds, which forgets networks, name and pairing secret but not the identity)
-it advertises over BLE as `iroh-<short endpoint id>` until a working set
-arrives, then turns BLE off.
+it advertises over BLE as `<kind>-<short endpoint id>` (`demo-a77370c66d`;
+the kind is `KIND` in `main.rs`) until a working set arrives, then turns BLE
+off.
 
 The RGB LED shows the state: blinking yellow while waiting for provisioning,
 yellow and green alternating while joining WiFi, solid green once joined.
@@ -47,7 +48,7 @@ cd esp32-c61-psram
 cargo run --release
 ```
 
-The serial log shows `Endpoint ID: …` and then `Advertising as iroh-…`.
+The serial log shows `Endpoint ID: …` and then `Advertising as demo-…`.
 
 - The first build downloads ESP-IDF. If you already built `server-esp32-c61-psram`,
   `ln -s ../../server-esp32-c61-psram/.embuild .embuild` reuses its copy.
@@ -74,7 +75,8 @@ npm run serve   # http://localhost:8080
 
 Enter the networks once, then press **provision a device** for each board. A
 number after `-` or `_` in the name counts up (`lamp-1`, `lamp-2`, …); `co2`
-stays `co2`. Each device
+stays `co2`. Without a name, devices are named after their kind: `demo-1`,
+`demo-2`, … Each device
 shows its ticket; the page remembers name and ticket per endpoint id, so
 provisioning a known device again only changes its networks and keeps its
 ticket valid.

@@ -18,11 +18,16 @@ use std::time::Duration;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
-use iroh_provision::device;
+use iroh_provision::{device, DeviceInfo};
 use iroh_provision_esp_idf::{
     fill_random, join_or_provision, keep_connected, watch_reset_button, NvsStorage, StationWifi,
 };
 use log::info;
+
+/// What this device is. Clients show it, name new devices after it (`demo-1`,
+/// `demo-2`, ...), and it's the start of the BLE name. A CO2 monitor would say
+/// `co2`, a lamp `lamp`.
+const KIND: &str = "demo";
 
 mod rgb_led;
 
@@ -62,8 +67,9 @@ fn main() {
     // (active low).
     let mut led = rgb_led::RgbIndicator::new(peripherals.spi2, peripherals.pins.gpio8)
         .expect("Failed to set up the LED");
-    let joined =
-        join_or_provision(&mut storage, &mut wifi, &secret, &mut led).expect("Failed to provision");
+    let info = DeviceInfo { kind: KIND.into() };
+    let joined = join_or_provision(&mut storage, &mut wifi, &secret, &info, &mut led)
+        .expect("Failed to provision");
     info!(
         "Joined {:?}, IP {}. This is where the iroh endpoint would start.",
         joined.ssid, joined.ip

@@ -7,10 +7,12 @@ get back a ticket that lets you pair with it.
 
 1. **First boot.** The device generates its ed25519 key, its iroh endpoint id,
    and keeps it forever. With no networks stored, it goes into provisioning
-   mode and offers its public key over a transport (BLE, in practice).
+   mode and offers its public key and its kind (e.g. `co2`) over a transport
+   (BLE, in practice).
 2. **Connect.** The client (a web page, a CLI) connects and reads the endpoint
-   id. Compare it with the one the device prints, to rule out someone
-   impersonating it.
+   id and kind. Compare the endpoint id with the one the device prints, to
+   rule out someone impersonating it. The kind gives new devices a default
+   name: `co2-1`, `co2-2`, …
 3. **Provision.** The client sends one message, sealed with HPKE to the
    endpoint id, so only that device can open it. The message holds:
    - up to 4 WiFi networks,

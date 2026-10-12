@@ -13,7 +13,7 @@
 use futures::channel::mpsc;
 use futures::StreamExt;
 use iroh_provision::client::Transport;
-use iroh_provision::{Status, CREDENTIALS_UUID, IDENTITY_UUID, SERVICE_UUID, STATUS_UUID};
+use iroh_provision::{Status, CREDENTIALS_UUID, INFO_UUID, SERVICE_UUID, STATUS_UUID};
 use js_sys::{DataView, JsString, Uint8Array};
 use n0_error::{e, stack_error};
 use wasm_bindgen::closure::Closure;
@@ -34,8 +34,6 @@ pub enum Error {
     Cancelled {},
     #[error("{message}")]
     Js { message: String },
-    #[error("identity is not 32 bytes")]
-    BadIdentity {},
     #[error("device disconnected")]
     Disconnected {},
 }
@@ -73,8 +71,8 @@ fn bytes(view: &DataView) -> Vec<u8> {
 /// A connection to one device, implementing [`Transport`].
 pub struct WebTransport {
     device: BluetoothDevice,
-    identity: BluetoothRemoteGattCharacteristic,
     credentials: BluetoothRemoteGattCharacteristic,
+    info: BluetoothRemoteGattCharacteristic,
     /// `None` marks a disconnect.
     statuses: mpsc::UnboundedReceiver<Option<Status>>,
     // Kept alive as long as the transport: the browser calls them.
@@ -99,9 +97,9 @@ impl WebTransport {
         let gatt = device.gatt().ok_or_else(|| e!(Error::Disconnected))?;
         let server = wait(gatt.connect()).await?;
         let service = wait(server.get_primary_service_with_str(SERVICE_UUID)).await?;
-        let identity = wait(service.get_characteristic_with_str(IDENTITY_UUID)).await?;
         let credentials = wait(service.get_characteristic_with_str(CREDENTIALS_UUID)).await?;
         let status = wait(service.get_characteristic_with_str(STATUS_UUID)).await?;
+        let info = wait(service.get_characteristic_with_str(INFO_UUID)).await?;
 
         let (tx, rx) = mpsc::unbounded();
         let status_tx = tx.clone();
@@ -135,8 +133,8 @@ impl WebTransport {
 
         Ok(Self {
             device,
-            identity,
             credentials,
+            info,
             statuses: rx,
             _on_status: on_status,
             _on_disconnect: on_disconnect,
@@ -157,9 +155,8 @@ impl WebTransport {
 impl Transport for WebTransport {
     type Error = Error;
 
-    async fn read_identity(&mut self) -> Result<[u8; 32], Error> {
-        let view = wait(self.identity.read_value()).await?;
-        bytes(&view).try_into().map_err(|_| e!(Error::BadIdentity))
+    async fn read_hello(&mut self) -> Result<Vec<u8>, Error> {
+        Ok(bytes(&wait(self.info.read_value()).await?))
     }
 
     async fn write_message(&mut self, sealed: &[u8]) -> Result<(), Error> {

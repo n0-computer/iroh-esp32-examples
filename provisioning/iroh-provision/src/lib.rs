@@ -30,10 +30,10 @@
 //!
 //! # GATT layout
 //!
-//! For BLE transports: one primary service ([`SERVICE_UUID`]) with three
+//! For BLE transports: one primary service ([`SERVICE_UUID`]) with these
 //! characteristics:
 //!
-//! - [`IDENTITY_UUID`] (read): the 32 byte ed25519 public key.
+//! - [`INFO_UUID`] (read): the encoded [`Hello`]: endpoint id and kind.
 //! - [`CREDENTIALS_UUID`] (write): a sealed [`Message`].
 //! - [`STATUS_UUID`] (read, notify): the encoded [`Status`].
 

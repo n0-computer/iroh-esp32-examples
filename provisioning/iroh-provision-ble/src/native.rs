@@ -17,7 +17,7 @@ use btleplug::api::{
 use btleplug::platform::{Manager, Peripheral};
 use futures::{FutureExt, Stream, StreamExt};
 use iroh_provision::client::Transport;
-use iroh_provision::{Status, CREDENTIALS_UUID, IDENTITY_UUID, SERVICE_UUID, STATUS_UUID};
+use iroh_provision::{Status, CREDENTIALS_UUID, INFO_UUID, SERVICE_UUID, STATUS_UUID};
 use n0_error::{e, stack_error};
 use uuid::Uuid;
 
@@ -33,8 +33,6 @@ pub enum Error {
     NoAdapter {},
     #[error("device lacks the {name} characteristic")]
     MissingCharacteristic { name: &'static str },
-    #[error("identity is not 32 bytes")]
-    BadIdentity {},
     #[error("device disconnected")]
     Disconnected {},
 }
@@ -108,17 +106,17 @@ impl Discovered {
                 .find(|c| c.uuid == id)
                 .ok_or_else(|| e!(Error::MissingCharacteristic { name }))
         };
-        let identity = find("identity", IDENTITY_UUID)?;
         let credentials = find("credentials", CREDENTIALS_UUID)?;
         let status = find("status", STATUS_UUID)?;
+        let info = find("info", INFO_UUID)?;
         peripheral.subscribe(&status).await?;
         let notifications = peripheral.notifications().await?;
         Ok(NativeTransport {
             name: self.name,
             peripheral,
-            identity,
             credentials,
             status,
+            info,
             notifications,
         })
     }
@@ -128,9 +126,9 @@ impl Discovered {
 pub struct NativeTransport {
     pub name: Option<String>,
     peripheral: Peripheral,
-    identity: Characteristic,
     credentials: Characteristic,
     status: Characteristic,
+    info: Characteristic,
     notifications: Pin<Box<dyn Stream<Item = ValueNotification> + Send>>,
 }
 
@@ -143,9 +141,8 @@ impl NativeTransport {
 impl Transport for NativeTransport {
     type Error = Error;
 
-    async fn read_identity(&mut self) -> Result<[u8; 32], Error> {
-        let bytes = self.peripheral.read(&self.identity).await?;
-        bytes.try_into().map_err(|_| e!(Error::BadIdentity))
+    async fn read_hello(&mut self) -> Result<Vec<u8>, Error> {
+        Ok(self.peripheral.read(&self.info).await?)
     }
 
     async fn write_message(&mut self, sealed: &[u8]) -> Result<(), Error> {

@@ -13,7 +13,8 @@
 //! let secret = device::load_or_create_identity(&mut storage, fill_random)?;
 //! // XIAO ESP32-C5: user LED on GPIO27, active low.
 //! let mut led = BlinkingLed::new(peripherals.pins.gpio27.into(), true)?;
-//! let joined = join_or_provision(&mut storage, &mut wifi, &secret, &mut led)?;
+//! let info = DeviceInfo { kind: "co2".into() };
+//! let joined = join_or_provision(&mut storage, &mut wifi, &secret, &info, &mut led)?;
 //! keep_connected(wifi, &mut storage, led);
 //! ```
 //!
@@ -44,7 +45,7 @@ use esp_idf_svc::hal::gpio::{AnyIOPin, PinDriver, Pull};
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::EspError;
 use iroh_provision::device::{self, Joined};
-use iroh_provision::SecretKey;
+use iroh_provision::{DeviceInfo, SecretKey};
 use log::{info, warn};
 use n0_error::stack_error;
 
@@ -80,19 +81,21 @@ pub fn fill_random(buf: &mut [u8]) {
 
 /// With stored networks, join one of them, retrying until it works (never
 /// provisioning mode). Without, run BLE provisioning until a working set
-/// arrives, then shut BLE down to free its memory. `indicator` shows the
+/// arrives, then shut BLE down to free its memory. `info` is what the device
+/// tells clients about itself, e.g. its kind. `indicator` shows the
 /// [`DeviceState`] along the way (pass `&mut ()` for none).
 pub fn join_or_provision(
     storage: &mut NvsStorage,
     wifi: &mut StationWifi,
     secret: &SecretKey,
+    info: &DeviceInfo,
     indicator: &mut impl Indicator,
 ) -> Result<Joined, Error> {
     if let Some(creds) = device::load_credentials(storage) {
         return Ok(device::connect(wifi, &creds, indicator, std::thread::sleep));
     }
     info!("No networks stored, provisioning over BLE");
-    let mut ble = BleTransport::start(&secret.public())?;
+    let mut ble = BleTransport::start(&secret.public(), info)?;
     let mut transport = device::Indicating {
         transport: &mut ble,
         indicator,

@@ -12,7 +12,7 @@ use n0_error::{e, stack_error};
 use crate::client::{ProvisionError, Session, Transport as ClientTransport};
 use crate::device::testing::{network, FakeWifi, MemStorage};
 use crate::device::{self, Joined, Transport as DeviceTransport};
-use crate::{Failure, PairingTicket, SecretKey, Status};
+use crate::{DeviceInfo, Failure, Hello, PairingTicket, PublicKey, SecretKey, Status};
 
 struct DeviceEnd {
     messages: mpsc::Receiver<Vec<u8>>,
@@ -42,8 +42,14 @@ struct Gone {}
 impl ClientTransport for ClientEnd {
     type Error = Gone;
 
-    async fn read_identity(&mut self) -> Result<[u8; 32], Gone> {
-        Ok(self.identity)
+    async fn read_hello(&mut self) -> Result<Vec<u8>, Gone> {
+        let hello = Hello {
+            endpoint: PublicKey::from_bytes(&self.identity).unwrap(),
+            info: DeviceInfo {
+                kind: "lamp".into(),
+            },
+        };
+        Ok(hello.encode())
     }
 
     async fn write_message(&mut self, sealed: &[u8]) -> Result<(), Gone> {
@@ -95,6 +101,7 @@ fn provision_retry_and_ticket() {
     block_on(async {
         let mut session = Session::connect(client).await.unwrap();
         assert_eq!(session.endpoint(), secret.public());
+        assert_eq!(session.info().kind, "lamp");
 
         // Wrong password: the device reports it, the session stays usable.
         let mut seen = Vec::new();

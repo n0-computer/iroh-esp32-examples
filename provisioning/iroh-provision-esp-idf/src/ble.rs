@@ -6,7 +6,8 @@ use esp32_nimble::utilities::BleUuid;
 use esp32_nimble::{BLEAdvertisementData, BLECharacteristic, BLEDevice, NimbleProperties};
 use iroh_provision::device::Transport;
 use iroh_provision::{
-    device_name, PublicKey, Status, CREDENTIALS_UUID, IDENTITY_UUID, SERVICE_UUID, STATUS_UUID,
+    device_name, DeviceInfo, Hello, PublicKey, Status, CREDENTIALS_UUID, INFO_UUID, SERVICE_UUID,
+    STATUS_UUID,
 };
 use log::{info, warn};
 
@@ -19,7 +20,7 @@ fn uuid(s: &str) -> BleUuid {
     BleUuid::from_uuid128_string(s).expect("valid UUID")
 }
 
-/// The provisioning GATT service, advertised as `iroh-<short endpoint id>`.
+/// The provisioning GATT service, advertised as `<kind>-<short endpoint id>`.
 pub struct BleTransport {
     messages: mpsc::Receiver<Vec<u8>>,
     status: Arc<Mutex<BLECharacteristic>>,
@@ -27,19 +28,23 @@ pub struct BleTransport {
 
 impl BleTransport {
     /// Set up the GATT service and start advertising.
-    pub fn start(identity: &PublicKey) -> Result<Self, Error> {
-        let name = device_name(identity);
+    pub fn start(identity: &PublicKey, info: &DeviceInfo) -> Result<Self, Error> {
+        let name = device_name(identity, &info.kind);
         let ble = BLEDevice::take();
         BLEDevice::set_device_name(&name)?;
         let server = ble.get_server();
         server.advertise_on_disconnect(true);
 
         let service = server.create_service(uuid(SERVICE_UUID));
+        let hello = Hello {
+            endpoint: *identity,
+            info: info.clone(),
+        };
         service
             .lock()
-            .create_characteristic(uuid(IDENTITY_UUID), NimbleProperties::READ)
+            .create_characteristic(uuid(INFO_UUID), NimbleProperties::READ)
             .lock()
-            .set_value(identity.as_bytes());
+            .set_value(&hello.encode());
         let status = service.lock().create_characteristic(
             uuid(STATUS_UUID),
             NimbleProperties::READ | NimbleProperties::NOTIFY,

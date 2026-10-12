@@ -8,6 +8,7 @@
 //!
 //! A number after `-`, `_` or a space in `--name` counts up per device
 //! (`lamp-1`, `lamp-2`, ...); in `co2` the digit is part of the name and stays.
+//! Without `--name`, devices are named after their kind: `co2-1`, `co2-2`, ...
 //! Prints each device's endpoint id (compare with its console) and its
 //! single-use pairing ticket.
 //!
@@ -103,6 +104,8 @@ async fn main() -> Result<()> {
         return Ok(());
     }
     let mut name = args.name.clone();
+    // Without --name: `<kind>-<n>`, counting per kind.
+    let mut per_kind = std::collections::HashMap::<String, u32>::new();
     for device in devices {
         let ble_name = device.name.clone().unwrap_or_else(|| "?".into());
         println!("\n{ble_name} ({} dBm)", device.rssi.unwrap_or_default());
@@ -115,6 +118,9 @@ async fn main() -> Result<()> {
         };
         let mut session = Session::connect(transport).await?;
         println!("  endpoint id {}", session.endpoint());
+        if !session.info().kind.is_empty() {
+            println!("  kind {}", session.info().kind);
+        }
         let known = args
             .tickets
             .iter()
@@ -125,7 +131,16 @@ async fn main() -> Result<()> {
                 (known_name.clone(), Some(ticket))
             }
             None => {
-                let this_name = name.clone().unwrap_or_else(|| ble_name.clone());
+                let kind = session.info().kind.clone();
+                let this_name = match (&name, kind.is_empty()) {
+                    (Some(name), _) => name.clone(),
+                    (None, true) => ble_name.clone(),
+                    (None, false) => {
+                        let n = per_kind.entry(kind.clone()).or_insert(0);
+                        *n += 1;
+                        format!("{kind}-{n}")
+                    }
+                };
                 println!("  provisioning as {this_name:?}...");
                 (this_name, None)
             }

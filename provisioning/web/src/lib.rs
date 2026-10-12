@@ -33,6 +33,7 @@ pub async fn connect_device() -> Result<Device, JsError> {
     let session = Session::connect(transport).await.map_err(js_err)?;
     Ok(Device {
         endpoint_id: session.endpoint().to_string(),
+        kind: session.info().kind.clone(),
         ble_name,
         browser_device,
         session: Rc::new(RefCell::new(Some(session))),
@@ -43,6 +44,7 @@ pub async fn connect_device() -> Result<Device, JsError> {
 #[wasm_bindgen]
 pub struct Device {
     endpoint_id: String,
+    kind: String,
     ble_name: String,
     browser_device: web_sys::BluetoothDevice,
     /// Taken out while a `provision` call runs.
@@ -67,7 +69,13 @@ impl Device {
         self.endpoint_id.clone()
     }
 
-    /// `iroh-<short endpoint id>`.
+    /// What kind of device it is, e.g. `co2`; empty if it doesn't say.
+    #[wasm_bindgen(getter)]
+    pub fn kind(&self) -> String {
+        self.kind.clone()
+    }
+
+    /// `<kind>-<short endpoint id>`.
     #[wasm_bindgen(getter)]
     pub fn ble_name(&self) -> String {
         self.ble_name.clone()
