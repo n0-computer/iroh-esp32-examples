@@ -33,11 +33,6 @@ impl StationWifi {
         wifi.start()?;
         Ok(Self(wifi))
     }
-
-    /// The driver, e.g. to keep it alive or reconnect later.
-    pub fn inner(&mut self) -> &mut BlockingWifi<EspWifi<'static>> {
-        &mut self.0
-    }
 }
 
 impl Wifi for StationWifi {
@@ -106,5 +101,9 @@ impl Wifi for StationWifi {
             .map_err(|_| Failure::NoIp)?
             .ip;
         Ok(ip)
+    }
+
+    fn is_connected(&mut self) -> bool {
+        self.0.is_connected().unwrap_or(false)
     }
 }

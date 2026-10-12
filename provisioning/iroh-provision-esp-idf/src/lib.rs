@@ -11,7 +11,10 @@
 //! let mut wifi = StationWifi::start(peripherals.modem, sys_loop, nvs_partition.clone())?;
 //! let mut storage = NvsStorage::new(nvs_partition)?;
 //! let secret = device::load_or_create_identity(&mut storage, fill_random)?;
-//! let joined = join_or_provision(&mut storage, &mut wifi, &secret)?;
+//! // XIAO ESP32-C5: user LED on GPIO27, active low.
+//! let mut led = BlinkingLed::new(peripherals.pins.gpio27.into(), true)?;
+//! let joined = join_or_provision(&mut storage, &mut wifi, &secret, &mut led)?;
+//! keep_connected(wifi, &mut storage, led);
 //! ```
 //!
 //! Needs NimBLE in the app's `sdkconfig.defaults`:
@@ -31,6 +34,7 @@ compile_error!(
 );
 
 mod ble;
+mod indicator;
 mod storage;
 mod wifi;
 
@@ -41,7 +45,7 @@ use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::sys::EspError;
 use iroh_provision::device::{self, Joined};
 use iroh_provision::SecretKey;
-use log::warn;
+use log::{info, warn};
 use n0_error::stack_error;
 
 pub use ble::BleTransport;
@@ -60,13 +64,13 @@ pub enum Error {
         source: esp32_nimble::BLEError,
     },
 }
-pub use storage::{NvsStorage, NVS_NAMESPACE};
+pub use indicator::{animate, BlinkingLed, SharedState};
+pub use iroh_provision::device::{DeviceState, Indicator};
+pub use storage::NvsStorage;
 pub use wifi::StationWifi;
 
-/// Rounds over the stored networks before falling back to provisioning.
-pub const JOIN_ROUNDS: usize = 3;
 /// How long to hold the reset button to forget the provisioned state.
-pub const RESET_HOLD: Duration = Duration::from_secs(5);
+const RESET_HOLD: Duration = Duration::from_secs(5);
 
 /// Fill `buf` from the hardware RNG. A true RNG only while WiFi or BLE is
 /// running, so generate keys after starting WiFi.
@@ -74,24 +78,52 @@ pub fn fill_random(buf: &mut [u8]) {
     unsafe { esp_idf_svc::sys::esp_fill_random(buf.as_mut_ptr().cast(), buf.len()) };
 }
 
-/// Join a stored network, or, if none works, run BLE provisioning until one
-/// does. BLE is shut down afterwards, freeing its memory.
+/// With stored networks, join one of them, retrying until it works (never
+/// provisioning mode). Without, run BLE provisioning until a working set
+/// arrives, then shut BLE down to free its memory. `indicator` shows the
+/// [`DeviceState`] along the way (pass `&mut ()` for none).
 pub fn join_or_provision(
     storage: &mut NvsStorage,
     wifi: &mut StationWifi,
     secret: &SecretKey,
+    indicator: &mut impl Indicator,
 ) -> Result<Joined, Error> {
-    if let Some(joined) = device::join_stored(storage, wifi, JOIN_ROUNDS) {
-        return Ok(joined);
+    if let Some(creds) = device::load_credentials(storage) {
+        return Ok(device::connect(wifi, &creds, indicator, std::thread::sleep));
     }
-    let mut transport = BleTransport::start(&secret.public())?;
+    info!("No networks stored, provisioning over BLE");
+    let mut ble = BleTransport::start(&secret.public())?;
+    let mut transport = device::Indicating {
+        transport: &mut ble,
+        indicator,
+    };
     let joined = device::provision(storage, wifi, secret, &mut transport)?;
-    transport.shutdown();
+    ble.shutdown();
     Ok(joined)
 }
 
+/// After [`join_or_provision`]: watch the connection on a thread, and when it
+/// drops, rejoin whichever stored network is available, retrying with growing
+/// pauses. The indicator shows [`DeviceState::Connecting`] meanwhile.
+pub fn keep_connected(
+    mut wifi: StationWifi,
+    storage: &mut NvsStorage,
+    mut indicator: impl Indicator + Send + 'static,
+) {
+    let Some(creds) = device::load_credentials(storage) else {
+        warn!("No networks stored, nothing to keep connected to");
+        return;
+    };
+    std::thread::Builder::new()
+        .stack_size(8192)
+        .spawn(move || {
+            device::stay_connected(&mut wifi, &creds, &mut indicator, std::thread::sleep)
+        })
+        .expect("Failed to spawn WiFi watchdog thread");
+}
+
 /// Watch a button (active low, e.g. BOOT) on a thread: held for
-/// [`RESET_HOLD`], it [forgets](device::forget) the provisioned state and
+/// 5 seconds, it [forgets](device::forget) the provisioned state and
 /// restarts into provisioning mode. The identity stays.
 ///
 /// BOOT is a strapping pin: held during reset it enters download mode, so

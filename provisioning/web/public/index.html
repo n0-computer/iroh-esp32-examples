@@ -22,12 +22,16 @@
         </label>
         <div id="networks"></div>
         <button id="add-network" type="button" class="link">add another network</button>
+        <label class="remember">
+          <input id="remember" type="checkbox" checked />
+          remember networks in this browser
+        </label>
       </div>
 
       <div class="card">
         <label>
           2. Devices
-          <span class="hint">(repeat for each device; a trailing number counts up; check each endpoint id against its serial console)</span>
+          <span class="hint">(repeat for each device; a number after - or _ counts up, as in lamp-1; check each endpoint id against its serial console)</span>
         </label>
         <input
           id="next-name"

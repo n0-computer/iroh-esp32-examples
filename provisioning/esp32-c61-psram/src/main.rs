@@ -3,8 +3,10 @@
 //! side) and `iroh-provision-esp-idf` (NimBLE, NVS, WiFi); see `../web` and
 //! `iroh-provision-ble` for clients.
 //!
-//! On boot: load or create the identity, join a stored network, or else run
-//! BLE provisioning until a working network arrives. Holding BOOT for 5 seconds
+//! On boot: load or create the identity. With stored networks, join one of
+//! them, retrying until it works, and keep rejoining whichever is available
+//! when the connection drops. Without, run BLE provisioning until a working set
+//! arrives. Holding BOOT for 5 seconds
 //! forgets networks, name and pairing secret (not the identity) and restarts
 //! into provisioning mode.
 //!
@@ -18,9 +20,11 @@ use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use iroh_provision::device;
 use iroh_provision_esp_idf::{
-    fill_random, join_or_provision, watch_reset_button, NvsStorage, StationWifi,
+    fill_random, join_or_provision, keep_connected, watch_reset_button, NvsStorage, StationWifi,
 };
 use log::info;
+
+mod rgb_led;
 
 fn main() {
     // It is necessary to call this function once. Otherwise, some patches to the runtime
@@ -51,11 +55,22 @@ fn main() {
         info!("Name: {name:?}");
     }
 
-    let joined = join_or_provision(&mut storage, &mut wifi, &secret).expect("Failed to provision");
+    // The RGB LED (GPIO8) shows the state: blinking yellow while waiting for
+    // provisioning, yellow/green while joining WiFi, green once joined. On a
+    // board with a plain LED, use the library's `BlinkingLed` instead, e.g. the
+    // XIAO ESP32-C5: `BlinkingLed::new(peripherals.pins.gpio27.into(), true)`
+    // (active low).
+    let mut led = rgb_led::RgbIndicator::new(peripherals.spi2, peripherals.pins.gpio8)
+        .expect("Failed to set up the LED");
+    let joined =
+        join_or_provision(&mut storage, &mut wifi, &secret, &mut led).expect("Failed to provision");
     info!(
         "Joined {:?}, IP {}. This is where the iroh endpoint would start.",
         joined.ssid, joined.ip
     );
+    // From now on, rejoin whichever stored network is there if the connection
+    // drops (LED yellow/green meanwhile).
+    keep_connected(wifi, &mut storage, led);
     loop {
         std::thread::sleep(Duration::from_secs(3600));
     }

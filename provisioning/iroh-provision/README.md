@@ -29,11 +29,21 @@ get back a ticket that lets you pair with it.
 
 Later:
 
-- **Reprovisioning** (new networks, e.g. after moving the device): send the
-  device's existing name and ticket again with the new networks. Only the
-  networks change; the ticket stays valid.
+- **Losing WiFi**: the device keeps trying all its stored networks, strongest
+  in range first, with growing pauses (5 s up to 60 s), at boot as well as
+  when the connection drops. It never goes back to provisioning mode on its
+  own: a router rebooting after a power cut usually comes back, and devices
+  stuck waiting for their tickets would be worse.
 - **Reset**: a long button press makes the device forget networks, name and
   pairing secret, and go back to provisioning mode. The endpoint id stays.
+  This is the only way into provisioning mode for a provisioned device.
+- **Reprovisioning** (new networks, e.g. after moving the device): reset it,
+  then send its existing name and ticket again with the new networks. Only
+  the networks change; the ticket stays valid.
+
+The device shows its state (`Provisioning`, `Connecting`, `Connected`) on an
+`Indicator`, in whatever way its hardware allows: blink patterns on a plain
+LED, colors on an RGB LED.
 
 ## Using it
 
@@ -61,10 +71,13 @@ Device, with feature `device`, over your own `Storage`, `Wifi` and
 
 ```rust
 let secret = device::load_or_create_identity(&mut storage, fill_random)?;
-let joined = match device::join_stored(&mut storage, &mut wifi, 3) {
-    Some(joined) => joined,
+let joined = match device::load_credentials(&mut storage) {
+    // Stored networks: keep trying them, never provisioning mode.
+    Some(creds) => device::connect(&mut wifi, &creds, &mut indicator, sleep),
     None => device::provision(&mut storage, &mut wifi, &secret, &mut transport)?,
 };
+// Later, on a thread: rejoin whatever stored network is around.
+device::stay_connected(&mut wifi, &creds, &mut indicator, sleep);
 ```
 
 ## Security

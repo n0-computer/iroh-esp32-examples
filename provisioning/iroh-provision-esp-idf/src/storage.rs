@@ -3,9 +3,9 @@ use esp_idf_svc::sys::EspError;
 use iroh_provision::device::Storage;
 
 /// The NVS namespace everything is stored in.
-pub const NVS_NAMESPACE: &str = "prov";
+const NVS_NAMESPACE: &str = "prov";
 
-/// [`Storage`] in the [`NVS_NAMESPACE`] namespace of the default partition.
+/// [`Storage`] in the `prov` namespace of the default NVS partition.
 pub struct NvsStorage(EspNvs<NvsDefault>);
 
 impl NvsStorage {

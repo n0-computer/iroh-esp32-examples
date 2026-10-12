@@ -6,13 +6,15 @@
 //!
 //! ```ignore
 //! let secret = device::load_or_create_identity(&mut storage, fill_random)?;
-//! let joined = match device::join_stored(&mut storage, &mut wifi, 3) {
-//!     Some(joined) => joined,
+//! // Provisioning mode only without networks; otherwise keep trying them.
+//! let joined = match device::load_credentials(&mut storage) {
+//!     Some(creds) => device::connect(&mut wifi, &creds, &mut led, std::thread::sleep),
 //!     None => device::provision(&mut storage, &mut wifi, &secret, &mut transport)?,
 //! };
 //! ```
 
 use std::net::Ipv4Addr;
+use std::time::Duration;
 
 use iroh_base::SecretKey;
 use log::{info, warn};
@@ -23,13 +25,13 @@ use crate::protocol::{
 };
 
 /// The endpoint's secret key (32 bytes). Survives [`forget`].
-pub const KEY_SECRET: &str = "secret";
+const KEY_SECRET: &str = "secret";
 /// The networks, in [`Credentials::to_bytes`] format.
-pub const KEY_NETWORKS: &str = "networks";
+const KEY_NETWORKS: &str = "networks";
 /// The name given at provisioning, UTF-8 (may be empty).
-pub const KEY_NAME: &str = "name";
+const KEY_NAME: &str = "name";
 /// The unredeemed pairing secret (32 bytes).
-pub const KEY_PAIRING: &str = "pairing";
+const KEY_PAIRING: &str = "pairing";
 
 /// Largest stored [`Credentials`]: count + per network two lengths and the
 /// maximum SSID and password.
@@ -61,6 +63,8 @@ pub trait Wifi {
     fn scan(&mut self) -> Vec<AccessPoint>;
     /// Join one network and wait for an IP address.
     fn join(&mut self, network: &Network) -> Result<Ipv4Addr, Failure>;
+    /// Still joined, with an IP address?
+    fn is_connected(&mut self) -> bool;
 }
 
 /// How provisioning messages reach the device, e.g. a BLE GATT service.
@@ -69,6 +73,64 @@ pub trait Transport {
     fn recv(&mut self) -> Vec<u8>;
     /// Report the current status to the client.
     fn set_status(&mut self, status: Status);
+}
+
+/// What the device is doing, for an [`Indicator`] to show in whatever way
+/// the hardware allows (blink patterns, colors, a display, ...).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum DeviceState {
+    /// Nothing shown yet.
+    Idle = 0,
+    /// Waiting for a provisioning message (also after a failed attempt).
+    Provisioning = 1,
+    /// Joining WiFi: at boot with stored networks, or after a message.
+    Connecting = 2,
+    /// Joined.
+    Connected = 3,
+}
+
+impl DeviceState {
+    /// The inverse of `state as u8`, e.g. for sharing it through an atomic.
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => DeviceState::Provisioning,
+            2 => DeviceState::Connecting,
+            3 => DeviceState::Connected,
+            _ => DeviceState::Idle,
+        }
+    }
+}
+
+/// Shows the user the [`DeviceState`], e.g. with an LED. `()` shows nothing.
+pub trait Indicator {
+    fn show(&mut self, state: DeviceState);
+}
+
+impl Indicator for () {
+    fn show(&mut self, _state: DeviceState) {}
+}
+
+/// A [`Transport`] that also shows the statuses it reports on an
+/// [`Indicator`]. Wrap the transport passed to [`provision`] in it.
+pub struct Indicating<'a, T, I> {
+    pub transport: &'a mut T,
+    pub indicator: &'a mut I,
+}
+
+impl<T: Transport, I: Indicator> Transport for Indicating<'_, T, I> {
+    fn recv(&mut self) -> Vec<u8> {
+        self.transport.recv()
+    }
+
+    fn set_status(&mut self, status: Status) {
+        self.indicator.show(match status {
+            Status::Unprovisioned | Status::Failed(_) => DeviceState::Provisioning,
+            Status::Connecting => DeviceState::Connecting,
+            Status::Connected { .. } => DeviceState::Connected,
+        });
+        self.transport.set_status(status);
+    }
 }
 
 /// A network the device joined.
@@ -200,23 +262,56 @@ pub fn join_any<W: Wifi>(wifi: &mut W, creds: &Credentials) -> Result<Joined, Fa
     Err(failure)
 }
 
-/// Join one of the stored networks, trying up to `rounds` times. `None` if
-/// nothing is stored or nothing worked: time to [`provision`].
-pub fn join_stored<S: Storage, W: Wifi>(
-    storage: &mut S,
+/// How often [`stay_connected`] checks the connection.
+const CHECK_INTERVAL: Duration = Duration::from_secs(5);
+/// First and longest pause between rounds of [`connect`].
+const BACKOFF: (Duration, Duration) = (Duration::from_secs(5), Duration::from_secs(60));
+
+/// Join one of the networks, retrying with growing pauses until it works,
+/// with the indicator on [`DeviceState::Connecting`] meanwhile.
+///
+/// Never gives up, and never falls back to provisioning: a network that's
+/// gone (a router rebooting after a power cut) usually comes back, and
+/// provisioning mode is only for devices without networks.
+pub fn connect<W: Wifi, I: Indicator>(
     wifi: &mut W,
-    rounds: usize,
-) -> Option<Joined> {
-    let Some(creds) = load_credentials(storage) else {
-        info!("No networks stored");
-        return None;
-    };
-    (1..=rounds).find_map(|round| {
-        info!("Joining a stored network (attempt {round}/{rounds})");
-        join_any(wifi, &creds)
-            .inspect_err(|failure| warn!("Join failed: {failure:?}"))
-            .ok()
-    })
+    creds: &Credentials,
+    indicator: &mut I,
+    mut sleep: impl FnMut(Duration),
+) -> Joined {
+    indicator.show(DeviceState::Connecting);
+    let mut pause = BACKOFF.0;
+    loop {
+        match join_any(wifi, creds) {
+            Ok(joined) => {
+                indicator.show(DeviceState::Connected);
+                return joined;
+            }
+            Err(failure) => {
+                warn!("No network joined ({failure:?}), retrying in {pause:?}");
+                sleep(pause);
+                pause = (pause * 2).min(BACKOFF.1);
+            }
+        }
+    }
+}
+
+/// Watch the connection forever: when it drops, [`connect`] again to
+/// whichever of the networks is available.
+pub fn stay_connected<W: Wifi, I: Indicator>(
+    wifi: &mut W,
+    creds: &Credentials,
+    indicator: &mut I,
+    mut sleep: impl FnMut(Duration),
+) -> ! {
+    loop {
+        sleep(CHECK_INTERVAL);
+        if !wifi.is_connected() {
+            warn!("WiFi connection lost");
+            let joined = connect(wifi, creds, indicator, &mut sleep);
+            info!("Rejoined {:?}, IP {}", joined.ssid, joined.ip);
+        }
+    }
 }
 
 /// Receive messages until one opens and one of its networks joins. Then store
@@ -313,6 +408,9 @@ pub(crate) mod testing {
         pub around: Vec<(&'static str, i8, &'static str)>,
         pub hidden_as: Option<&'static str>,
         pub attempts: Vec<String>,
+        /// Scans that see nothing, as if every network were down.
+        pub outages: usize,
+        pub connected: bool,
     }
 
     impl FakeWifi {
@@ -321,12 +419,18 @@ pub(crate) mod testing {
                 around,
                 hidden_as: None,
                 attempts: Vec::new(),
+                outages: 0,
+                connected: false,
             }
         }
     }
 
     impl Wifi for FakeWifi {
         fn scan(&mut self) -> Vec<AccessPoint> {
+            if self.outages > 0 {
+                self.outages -= 1;
+                return Vec::new();
+            }
             self.around
                 .iter()
                 .map(|&(ssid, rssi, _)| AccessPoint {
@@ -341,12 +445,18 @@ pub(crate) mod testing {
             let found = self.around.iter().find(|&&(ssid, _, _)| {
                 ssid == network.ssid || (ssid.is_empty() && self.hidden_as == Some(&network.ssid))
             });
-            match found {
+            let result = match found {
                 Some(&(_, _, password)) if password == network.password => {
                     Ok(Ipv4Addr::new(192, 168, 0, 10))
                 }
                 _ => Err(Failure::WifiConnect),
-            }
+            };
+            self.connected = result.is_ok();
+            result
+        }
+
+        fn is_connected(&mut self) -> bool {
+            self.connected
         }
     }
 
@@ -412,6 +522,59 @@ mod tests {
         wifi.hidden_as = Some("secret-net");
         let joined = join_any(&mut wifi, &creds(vec![network("secret-net", "pw")])).unwrap();
         assert_eq!(joined.ssid, "secret-net");
+    }
+
+    /// Records what an indicator was told.
+    #[derive(Default)]
+    struct Shown(Vec<DeviceState>);
+
+    impl Indicator for Shown {
+        fn show(&mut self, state: DeviceState) {
+            self.0.push(state);
+        }
+    }
+
+    #[test]
+    fn connect_retries_with_backoff_until_a_network_returns() {
+        // The router is down for four scans, e.g. still booting after a power cut.
+        let mut wifi = FakeWifi::new(vec![("home", -50, "pw")]);
+        wifi.outages = 4;
+        let mut shown = Shown::default();
+        let mut pauses = Vec::new();
+        let joined = connect(
+            &mut wifi,
+            &creds(vec![network("home", "pw")]),
+            &mut shown,
+            |d| pauses.push(d.as_secs()),
+        );
+        assert_eq!(joined.ssid, "home");
+        assert_eq!(pauses, [5, 10, 20, 40]);
+        assert_eq!(shown.0, [DeviceState::Connecting, DeviceState::Connected]);
+    }
+
+    #[test]
+    fn backoff_is_capped() {
+        let mut wifi = FakeWifi::new(vec![("home", -50, "pw")]);
+        wifi.outages = 7;
+        let mut pauses = Vec::new();
+        connect(
+            &mut wifi,
+            &creds(vec![network("home", "pw")]),
+            &mut (),
+            |d| pauses.push(d.as_secs()),
+        );
+        assert_eq!(pauses, [5, 10, 20, 40, 60, 60, 60]);
+    }
+
+    #[test]
+    fn reconnect_switches_to_the_other_hotspot() {
+        let both = creds(vec![network("home", "pw"), network("phone", "pw2")]);
+        let mut wifi = FakeWifi::new(vec![("home", -40, "pw"), ("phone", -70, "pw2")]);
+        assert_eq!(connect(&mut wifi, &both, &mut (), |_| {}).ssid, "home");
+        // "home" goes away: the connection drops, only "phone" is left.
+        wifi.around.remove(0);
+        wifi.connected = false;
+        assert_eq!(connect(&mut wifi, &both, &mut (), |_| {}).ssid, "phone");
     }
 
     #[test]

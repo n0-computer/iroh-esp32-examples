@@ -6,7 +6,8 @@
 //!     [--ticket lamp-0=pair...] [--scan 5]
 //! ```
 //!
-//! A trailing number in `--name` counts up per device (`lamp-1`, `lamp-2`, ...).
+//! A number after `-`, `_` or a space in `--name` counts up per device
+//! (`lamp-1`, `lamp-2`, ...); in `co2` the digit is part of the name and stays.
 //! Prints each device's endpoint id (compare with its console) and its
 //! single-use pairing ticket.
 //!
@@ -65,15 +66,31 @@ fn parse_args() -> Result<Args> {
     Ok(args)
 }
 
-/// "lamp-1" -> "lamp-2"; names without a trailing number stay.
+/// Count up a number after a separator: "lamp-1" -> "lamp-2", "desk 09" ->
+/// "desk 10". Other names stay: in "co2" the digit is part of the name.
 fn next_name(name: &str) -> String {
-    let digits = name.len() - name.trim_end_matches(|c: char| c.is_ascii_digit()).len();
-    if digits == 0 {
+    let prefix = name.trim_end_matches(|c: char| c.is_ascii_digit());
+    let digits = name.len() - prefix.len();
+    if digits == 0 || !prefix.ends_with(['-', '_', ' ']) {
         return name.to_owned();
     }
-    let (prefix, number) = name.split_at(name.len() - digits);
-    let next = number.parse::<u64>().unwrap_or(0) + 1;
+    let next = name[prefix.len()..].parse::<u64>().unwrap_or(0) + 1;
     format!("{prefix}{next:0digits$}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_name;
+
+    #[test]
+    fn counts_only_after_a_separator() {
+        assert_eq!(next_name("lamp-1"), "lamp-2");
+        assert_eq!(next_name("desk 09"), "desk 10");
+        assert_eq!(next_name("node_99"), "node_100");
+        assert_eq!(next_name("co2"), "co2");
+        assert_eq!(next_name("co2-1"), "co2-2");
+        assert_eq!(next_name("lamp"), "lamp");
+    }
 }
 
 #[tokio::main]

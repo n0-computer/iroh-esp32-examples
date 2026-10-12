@@ -152,12 +152,6 @@ impl WebTransport {
     pub fn device(&self) -> &BluetoothDevice {
         &self.device
     }
-
-    pub fn disconnect(&self) {
-        if let Some(gatt) = self.device.gatt() {
-            gatt.disconnect();
-        }
-    }
 }
 
 impl Transport for WebTransport {

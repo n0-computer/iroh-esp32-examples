@@ -14,7 +14,7 @@ pub const STATUS_UUID: &str = "2484ca31-949d-4bbe-a7b0-b2f4016532f6";
 
 /// Prefix of the BLE device name; the device appends iroh's short form of its
 /// endpoint id, so several boards in one room can be told apart.
-pub const NAME_PREFIX: &str = "iroh-";
+const NAME_PREFIX: &str = "iroh-";
 
 /// Version byte at the start of a sealed message, outside the encryption.
 const VERSION: u8 = 1;
@@ -113,17 +113,6 @@ impl PairingSecret {
         let mut secret = [0u8; PAIRING_SECRET_LEN];
         getrandom::fill(&mut secret).expect("no system RNG");
         Self(secret)
-    }
-
-    /// Constant-time comparison, for checking a presented secret.
-    pub fn matches(&self, presented: &[u8]) -> bool {
-        presented.len() == PAIRING_SECRET_LEN
-            && self
-                .0
-                .iter()
-                .zip(presented)
-                .fold(0u8, |acc, (a, b)| acc | (a ^ b))
-                == 0
     }
 }
 
@@ -545,15 +534,6 @@ mod tests {
                 Err(Error::Unsupported { .. })
             ));
             assert!(s[4..].parse::<PairingTicket>().is_err());
-        }
-
-        #[test]
-        fn secret_matching() {
-            let secret = PairingSecret::generate();
-            assert!(secret.matches(&secret.0));
-            assert!(!secret.matches(&[0; PAIRING_SECRET_LEN]));
-            assert!(!secret.matches(&secret.0[..31]));
-            assert_ne!(PairingSecret::generate(), secret);
         }
     }
 

@@ -27,11 +27,16 @@ Separate Cargo projects, like the rest of this repo:
 
 ## The device
 
-On boot it loads or creates its identity, joins the strongest stored network in
-range, or else advertises over BLE as `iroh-<short endpoint id>` until a working
-set of networks arrives. Then it turns BLE off. Holding BOOT for 5 seconds
-forgets networks, name and pairing secret (not the identity) and restarts into
-provisioning mode.
+On boot it loads or creates its identity. With stored networks it joins the
+strongest one in range, retrying until one works, and later rejoins whichever
+is available when the connection drops; it never goes back to provisioning
+mode by itself. Without networks (first boot, or after holding BOOT for 5
+seconds, which forgets networks, name and pairing secret but not the identity)
+it advertises over BLE as `iroh-<short endpoint id>` until a working set
+arrives, then turns BLE off.
+
+The RGB LED shows the state: blinking yellow while waiting for provisioning,
+yellow and green alternating while joining WiFi, solid green once joined.
 
 Same toolchain as [`server-esp32-c61-psram`](../server-esp32-c61-psram/README.md#toolchain-requirements)
 (ESP-IDF v5.5.2+, espflash 4.4+), with esp-idf-svc 0.53 because esp32-nimble
@@ -54,6 +59,10 @@ The serial log shows `Endpoint ID: …` and then `Advertising as iroh-…`.
   "Illegal instruction" panic; `espflash board-info` tells you what's connected.
 - The BOOT pin is set in `main.rs`: GPIO9 on the ESP32-C61 DevKit. Other boards
   differ; the XIAO ESP32-C5 uses GPIO28.
+- The LED is board specific too. The C61 DevKit only has an RGB LED (WS2812 on
+  GPIO8), driven over SPI because the C61 has no RMT ([`rgb_led.rs`](esp32-c61-psram/src/rgb_led.rs),
+  from iroh-co2-monitor). Boards with a plain LED use `BlinkingLed` from
+  `iroh-provision-esp-idf`; the XIAO ESP32-C5's user LED is GPIO27, active low.
 
 ## The page
 
@@ -64,7 +73,8 @@ npm run serve   # http://localhost:8080
 ```
 
 Enter the networks once, then press **provision a device** for each board. A
-trailing number in the name counts up (`lamp-1`, `lamp-2`, …). Each device
+number after `-` or `_` in the name counts up (`lamp-1`, `lamp-2`, …); `co2`
+stays `co2`. Each device
 shows its ticket; the page remembers name and ticket per endpoint id, so
 provisioning a known device again only changes its networks and keeps its
 ticket valid.

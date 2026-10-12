@@ -22,12 +22,6 @@ pub fn max_networks() -> usize {
     iroh_provision::MAX_NETWORKS
 }
 
-/// The longest device name, in bytes.
-#[wasm_bindgen]
-pub fn max_name_len() -> usize {
-    iroh_provision::MAX_NAME_LEN
-}
-
 /// Show the browser's Bluetooth picker and connect to the chosen device. Call
 /// from a click handler. Rejects with "no device picked" if the picker was
 /// closed.

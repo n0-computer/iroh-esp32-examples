@@ -132,7 +132,8 @@ fn provision_retry_and_ticket() {
         assert_eq!(device::load_name(&mut storage).as_deref(), Some("lamp-1"));
         // And comes back on its own after a reboot.
         let mut wifi = FakeWifi::new(vec![("home", -50, "right")]);
-        let rejoined = device::join_stored(&mut storage, &mut wifi, 1).unwrap();
+        let creds = device::load_credentials(&mut storage).unwrap();
+        let rejoined = device::connect(&mut wifi, &creds, &mut (), |_| panic!("no retry needed"));
         assert_eq!(rejoined.ssid, "home");
     });
 }

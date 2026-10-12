@@ -16,6 +16,7 @@ const $ = (sel) => document.querySelector(sel);
 const $status = $("#status");
 const $networks = $("#networks");
 const $addNetwork = $("#add-network");
+const $remember = $("#remember");
 const $provision = $("#provision");
 const $nextName = $("#next-name");
 const $provisionResult = $("#provision-result");
@@ -27,23 +28,49 @@ const $forget = $("#forget");
 await init();
 
 // --- Networks ---------------------------------------------------------------
-// Kept in the page only (not in localStorage): they're WiFi passwords.
+// Remembered in localStorage while "remember" is ticked (the default), so they
+// survive reloads. That's plain text in this browser profile, for this origin
+// only; unticking deletes them.
 
-function addNetworkRow() {
+const NETWORKS_KEY = "iroh-provisioning:networks";
+
+function loadNetworks() {
+  try {
+    return JSON.parse(localStorage.getItem(NETWORKS_KEY)) ?? [];
+  } catch {
+    return [];
+  }
+}
+
+function saveNetworks() {
+  try {
+    if ($remember.checked) {
+      localStorage.setItem(NETWORKS_KEY, JSON.stringify(networks()));
+    } else {
+      localStorage.removeItem(NETWORKS_KEY);
+    }
+  } catch (err) {
+    console.warn("could not store networks", err);
+  }
+}
+
+function addNetworkRow(network = { ssid: "", password: "" }) {
   const row = document.createElement("div");
   row.className = "network";
   row.innerHTML = `
     <input class="ssid" type="text" maxlength="32" placeholder="network name" autocomplete="off" />
     <input class="password" type="password" maxlength="64" placeholder="password" autocomplete="off" />
     <button type="button" class="link remove">remove</button>`;
+  row.querySelector(".ssid").value = network.ssid;
+  row.querySelector(".password").value = network.password;
   row.querySelector(".remove").addEventListener("click", () => {
     row.remove();
     updateNetworkRows();
   });
-  row.querySelector(".ssid").addEventListener("input", updateNetworkRows);
+  row.addEventListener("input", updateNetworkRows);
   $networks.append(row);
   updateNetworkRows();
-  row.querySelector(".ssid").focus();
+  return row;
 }
 
 function updateNetworkRows() {
@@ -51,6 +78,7 @@ function updateNetworkRows() {
   rows.forEach((row) => (row.querySelector(".remove").hidden = rows.length === 1));
   $addNetwork.hidden = rows.length >= max_networks();
   $provision.disabled = !navigator.bluetooth || networks().length === 0;
+  saveNetworks();
 }
 
 /** The networks as entered, skipping rows without a name. */
@@ -63,8 +91,14 @@ function networks() {
     .filter(({ ssid }) => ssid !== "");
 }
 
-$addNetwork.addEventListener("click", addNetworkRow);
-addNetworkRow();
+$addNetwork.addEventListener("click", () => addNetworkRow().querySelector(".ssid").focus());
+$remember.addEventListener("change", saveNetworks);
+{
+  const stored = loadNetworks();
+  $remember.checked = true;
+  if (stored.length) stored.forEach((n) => addNetworkRow(n));
+  else addNetworkRow().querySelector(".ssid").focus();
+}
 
 // --- Remembered devices -----------------------------------------------------
 // Provisioning is also how the page learns a device's endpoint id: read over
@@ -113,9 +147,12 @@ function ticketElement(ticket) {
   return div;
 }
 
-/** "lamp-1" -> "lamp-2"; names without a trailing number stay. */
+/**
+ * Count up a number after a separator: "lamp-1" -> "lamp-2", "desk 09" ->
+ * "desk 10". Other names stay: in "co2" the digit is part of the name.
+ */
 function nextName(name) {
-  const m = name.match(/^(.*?)(\d+)$/);
+  const m = name.match(/^(.*[-_ ])(\d+)$/);
   if (!m) return name;
   return m[1] + String(Number(m[2]) + 1).padStart(m[2].length, "0");
 }
