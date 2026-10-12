@@ -1277,6 +1277,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "iroh-provision"
+version = "0.1.0"
+dependencies = [
+ "data-encoding",
+ "hpke",
+ "iroh-base",
+ "log",
+ "n0-error",
+ "postcard",
+ "serde",
+]
+
+[[package]]
+name = "iroh-provision-esp-idf"
+version = "0.1.0"
+dependencies = [
+ "embuild",
+ "esp-idf-svc",
+ "esp32-nimble",
+ "iroh-provision",
+ "log",
+ "n0-error",
+]
+
+[[package]]
 name = "itertools"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1550,21 +1575,9 @@ version = "0.1.0"
 dependencies = [
  "embuild",
  "esp-idf-svc",
- "esp32-nimble",
- "iroh-base",
+ "iroh-provision",
+ "iroh-provision-esp-idf",
  "log",
- "provisioning-proto",
-]
-
-[[package]]
-name = "provisioning-proto"
-version = "0.1.0"
-dependencies = [
- "data-encoding",
- "hpke",
- "iroh-base",
- "postcard",
- "serde",
 ]
 
 [[package]]

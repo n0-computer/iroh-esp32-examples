@@ -1,11 +1,14 @@
-//! The crypto half of the provisioning client. Web Bluetooth itself is driven
-//! from `public/main.js`; this module seals the credentials to the device's
-//! identity using the same `provisioning-proto` crate the device opens them with.
+//! The provisioning page's wasm module: a thin JS binding over
+//! [`iroh_provision::client::Session`] with the Web Bluetooth transport from
+//! `iroh-provision-ble`. All BLE and protocol logic is in those crates; the JS
+//! in `public/main.js` only does the UI.
 
-use iroh_base::PublicKey;
-use provisioning_proto::{
-    Credentials, Failure, Message, Network, PairingSecret, PairingTicket, Provisioning, Status,
-};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use iroh_provision::client::Session;
+use iroh_provision::{Network, PairingTicket, Status};
+use iroh_provision_ble::web::WebTransport;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -13,141 +16,147 @@ fn start() {
     console_error_panic_hook::set_once();
 }
 
-/// GATT UUIDs, exported so the protocol has exactly one definition.
-#[wasm_bindgen]
-pub fn service_uuid() -> String {
-    provisioning_proto::SERVICE_UUID.into()
-}
-
-#[wasm_bindgen]
-pub fn identity_uuid() -> String {
-    provisioning_proto::IDENTITY_UUID.into()
-}
-
-#[wasm_bindgen]
-pub fn credentials_uuid() -> String {
-    provisioning_proto::CREDENTIALS_UUID.into()
-}
-
-#[wasm_bindgen]
-pub fn status_uuid() -> String {
-    provisioning_proto::STATUS_UUID.into()
-}
-
-/// The endpoint id, in iroh's display format, for the bytes read from the
-/// identity characteristic.
-#[wasm_bindgen]
-pub fn endpoint_id(identity: &[u8]) -> Result<String, JsError> {
-    Ok(public_key(identity)?.to_string())
-}
-
-/// The most networks [`provision`] accepts.
+/// The most networks a device takes.
 #[wasm_bindgen]
 pub fn max_networks() -> usize {
-    provisioning_proto::MAX_NETWORKS
+    iroh_provision::MAX_NETWORKS
 }
 
-/// The longest device name [`provision`] accepts, in bytes.
+/// The longest device name, in bytes.
 #[wasm_bindgen]
 pub fn max_name_len() -> usize {
-    provisioning_proto::MAX_NAME_LEN
+    iroh_provision::MAX_NAME_LEN
 }
 
-/// A sealed provisioning message, and the pairing ticket it makes valid once
-/// the device accepts it.
-#[wasm_bindgen(getter_with_clone)]
-pub struct Sealed {
-    /// Write this to the credentials characteristic.
-    pub message: Vec<u8>,
-    /// `pair…`: endpoint id + the fresh pairing secret in `message`.
-    pub ticket: String,
-}
-
-/// Seal networks, a name and a fresh pairing secret to the device's identity.
-/// `ssids[i]` goes with `passwords[i]`; the device replaces its stored state
-/// with this. Every call generates a new secret, so only the ticket of the
-/// message the device accepted is valid.
+/// Show the browser's Bluetooth picker and connect to the chosen device. Call
+/// from a click handler. Rejects with "no device picked" if the picker was
+/// closed.
 #[wasm_bindgen]
-pub fn provision(
-    identity: &[u8],
-    ssids: Vec<String>,
-    passwords: Vec<String>,
-    name: String,
-) -> Result<Sealed, JsError> {
-    if ssids.len() != passwords.len() {
-        return Err(JsError::new("one password per network"));
-    }
-    let networks = ssids
-        .into_iter()
-        .zip(passwords)
-        .map(|(ssid, password)| Network { ssid, password })
-        .collect();
-    let endpoint = public_key(identity)?;
-    let pairing_secret = PairingSecret::generate();
-    let provisioning = Message::Provision(Provisioning {
-        credentials: Credentials { networks },
-        name,
-        pairing_secret: pairing_secret.clone(),
-    });
-    let message = provisioning_proto::seal(&endpoint, &provisioning).map_err(js_err)?;
-    let ticket = PairingTicket {
-        endpoint,
-        secret: pairing_secret,
-    };
-    Ok(Sealed {
-        message,
-        ticket: ticket.to_string(),
+pub async fn connect_device() -> Result<Device, JsError> {
+    let transport = WebTransport::request().await.map_err(js_err)?;
+    let ble_name = transport.name().unwrap_or_default();
+    let browser_device = transport.device().clone();
+    let session = Session::connect(transport).await.map_err(js_err)?;
+    Ok(Device {
+        endpoint_id: session.endpoint().to_string(),
+        ble_name,
+        browser_device,
+        session: Rc::new(RefCell::new(Some(session))),
     })
 }
 
-/// A decoded status notification, for display.
+/// A device in provisioning mode, connected over Web Bluetooth.
+#[wasm_bindgen]
+pub struct Device {
+    endpoint_id: String,
+    ble_name: String,
+    browser_device: web_sys::BluetoothDevice,
+    /// Taken out while a `provision` call runs.
+    session: Rc<RefCell<Option<Session<WebTransport>>>>,
+}
+
+/// What a successful `provision` resolves to.
 #[wasm_bindgen(getter_with_clone)]
-pub struct StatusView {
-    /// `unprovisioned`, `connecting`, `connected`, `failed` or `unknown`.
-    pub state: String,
-    /// Human readable detail: the IP, or why it failed.
-    pub detail: String,
-    /// For `connected`: the index of the network that joined.
-    pub network: Option<u8>,
+pub struct Provisioned {
+    /// `pair…`: single-use, endpoint id + the pairing secret the device holds.
+    pub ticket: String,
+    /// The network it joined.
+    pub ssid: String,
+    pub ip: String,
 }
 
 #[wasm_bindgen]
-pub fn decode_status(bytes: &[u8]) -> StatusView {
-    let mut network = None;
-    let (state, detail) = match Status::decode(bytes) {
-        Some(Status::Unprovisioned) => ("unprovisioned", "waiting for credentials".to_owned()),
-        Some(Status::Connecting) => ("connecting", "joining a network…".to_owned()),
-        Some(Status::Connected {
-            network: index,
-            ip: [a, b, c, d],
-        }) => {
-            network = Some(index);
-            ("connected", format!("IP {a}.{b}.{c}.{d}"))
+impl Device {
+    /// Compare with the endpoint id the device prints.
+    #[wasm_bindgen(getter)]
+    pub fn endpoint_id(&self) -> String {
+        self.endpoint_id.clone()
+    }
+
+    /// `iroh-<short endpoint id>`.
+    #[wasm_bindgen(getter)]
+    pub fn ble_name(&self) -> String {
+        self.ble_name.clone()
+    }
+
+    /// Send networks (`ssids[i]` with `passwords[i]`) and a name; resolve once
+    /// the device joined one, reject with the reason otherwise. `ticket`:
+    /// `null` for a new pairing secret, or the device's existing ticket to keep
+    /// it valid (reprovisioning). `on_status(state, detail)` gets the steps in
+    /// between. Can be called again after a failure.
+    pub async fn provision(
+        &self,
+        ssids: Vec<String>,
+        passwords: Vec<String>,
+        name: String,
+        ticket: Option<String>,
+        on_status: js_sys::Function,
+    ) -> Result<Provisioned, JsError> {
+        if ssids.len() != passwords.len() {
+            return Err(JsError::new("one password per network"));
         }
-        Some(Status::Failed(failure)) => (
-            "failed",
-            match failure {
-                Failure::BadMessage => "device could not open the credentials",
-                Failure::WifiConnect => "could not join: probably a wrong password",
-                Failure::NoIp => "joined, but got no IP address",
-                Failure::NotFound => "none of the networks is in range",
-                Failure::Unsupported => "device firmware is too old for this page",
-            }
-            .to_owned(),
-        ),
-        None => ("unknown", format!("unrecognized status {bytes:02x?}")),
-    };
-    StatusView {
-        state: state.into(),
-        detail,
-        network,
+        let networks: Vec<Network> = ssids
+            .into_iter()
+            .zip(passwords)
+            .map(|(ssid, password)| Network { ssid, password })
+            .collect();
+        let ticket: Option<PairingTicket> =
+            ticket.map(|t| t.parse()).transpose().map_err(js_err)?;
+        let mut session = self
+            .session
+            .borrow_mut()
+            .take()
+            .ok_or_else(|| JsError::new("already provisioning"))?;
+        let result = session
+            .provision_with(&networks, &name, ticket.as_ref(), |status| {
+                let (state, detail) = describe(status);
+                let _ = on_status.call2(&JsValue::NULL, &state.into(), &detail.into());
+            })
+            .await;
+        *self.session.borrow_mut() = Some(session);
+        let provisioned = result.map_err(js_err)?;
+        Ok(Provisioned {
+            ticket: provisioned.ticket.to_string(),
+            ssid: provisioned.ssid,
+            ip: provisioned.ip.to_string(),
+        })
+    }
+
+    /// Call `callback()` when the Bluetooth connection drops. After success,
+    /// the device turns Bluetooth off itself.
+    pub fn on_disconnect(&self, callback: js_sys::Function) {
+        let closure = Closure::<dyn FnMut()>::new(move || {
+            let _ = callback.call0(&JsValue::NULL);
+        });
+        let _ = self.browser_device.add_event_listener_with_callback(
+            "gattserverdisconnected",
+            closure.as_ref().unchecked_ref(),
+        );
+        // Lives as long as the page; there's one per device.
+        closure.forget();
+    }
+
+    pub fn disconnect(&self) {
+        if let Some(gatt) = self.browser_device.gatt() {
+            gatt.disconnect();
+        }
     }
 }
 
-fn public_key(identity: &[u8]) -> Result<PublicKey, JsError> {
-    PublicKey::try_from(identity).map_err(js_err)
+/// `(state, detail)` for the UI.
+fn describe(status: &Status) -> (&'static str, String) {
+    match status {
+        Status::Unprovisioned => ("unprovisioned", "waiting for credentials".into()),
+        Status::Connecting => ("connecting", "joining a network…".into()),
+        Status::Connected { ip, .. } => {
+            let [a, b, c, d] = ip;
+            ("connected", format!("IP {a}.{b}.{c}.{d}"))
+        }
+        Status::Failed(failure) => ("failed", failure.describe().into()),
+    }
 }
 
+/// The whole error chain, e.g. "transport failed: device disconnected".
 fn js_err(err: impl std::fmt::Display) -> JsError {
-    JsError::new(&err.to_string())
+    JsError::new(&format!("{err:#}"))
 }

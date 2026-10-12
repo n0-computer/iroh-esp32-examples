@@ -1,0 +1,44 @@
+[package]
+name = "iroh-provision-ble"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "BLE transports for iroh-provision clients: native (btleplug) and Web Bluetooth"
+
+[features]
+default = []
+# Desktop BLE via btleplug (macOS, Linux, Windows).
+native = ["dep:btleplug", "dep:tokio", "dep:uuid"]
+# Web Bluetooth via web-sys, for wasm. Needs --cfg=web_sys_unstable_apis.
+web = ["dep:web-sys", "dep:js-sys", "dep:wasm-bindgen", "dep:wasm-bindgen-futures"]
+
+[dependencies]
+iroh-provision = { path = "../iroh-provision", features = ["client"] }
+n0-error = "1.0.1"
+futures = { version = "0.3", default-features = false, features = ["std"] }
+btleplug = { version = "=0.13.3", optional = true }
+tokio = { version = "1", features = ["time"], optional = true }
+uuid = { version = "1", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+    "Window",
+    "Navigator",
+    "Event",
+    "EventTarget",
+    "Bluetooth",
+    "BluetoothDevice",
+    "BluetoothLeScanFilterInit",
+    "BluetoothRemoteGattCharacteristic",
+    "BluetoothRemoteGattServer",
+    "BluetoothRemoteGattService",
+    "RequestDeviceOptions",
+] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
+[[example]]
+name = "provision"
+required-features = ["native"]

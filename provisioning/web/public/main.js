@@ -1,28 +1,18 @@
-// Web Bluetooth side of the provisioning client. The crypto (sealing the
-// credentials to the device's endpoint id) lives in the wasm module, built from
-// the same Rust crate the device uses to open them.
+// The provisioning page's UI. Everything else (Web Bluetooth, sealing, the
+// protocol) is Rust: `iroh-provision`'s client Session over the Web Bluetooth
+// transport from `iroh-provision-ble`, exposed by the wasm module.
 //
 // Flow: enter the networks once, then provision any number of devices with
 // them. Each device gets its own row; a failed one can be retried over its
 // still-open connection after fixing the networks.
 //
-// Each message also carries a name and a fresh pairing secret. Endpoint id +
-// secret form a single-use pairing ticket: the endpoint id alone is public, so
-// it can't be what authorizes control of the device.
-import init, {
-  service_uuid,
-  identity_uuid,
-  credentials_uuid,
-  status_uuid,
-  endpoint_id,
-  provision,
-  max_networks,
-  decode_status,
-} from "./wasm/provisioning_web.js";
+// Each device gets a name and a pairing secret. Endpoint id + secret form a
+// single-use pairing ticket: the endpoint id alone is public, so it can't be
+// what authorizes control of the device. Provisioning a known device again only
+// changes its networks: it keeps its name and its ticket stays valid.
+import init, { connect_device, max_networks } from "./wasm/provisioning_web.js";
 
 const $ = (sel) => document.querySelector(sel);
-// Characteristic values arrive as DataViews, possibly into a larger buffer.
-const bytes = (view) => new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
 const $status = $("#status");
 const $networks = $("#networks");
 const $addNetwork = $("#add-network");
@@ -197,106 +187,74 @@ function sessionRow(id) {
 }
 
 async function provisionDevice() {
-  // The browser shows a picker with only the devices advertising our service.
-  // Throws NotFoundError if the user closes it.
-  const device = await navigator.bluetooth.requestDevice({
-    filters: [{ services: [service_uuid()] }],
-  });
-  const server = await device.gatt.connect();
-  const service = await server.getPrimaryService(service_uuid());
-  const identity = bytes(await (await service.getCharacteristic(identity_uuid())).readValue());
-  const id = endpoint_id(identity);
+  // Shows the browser's picker; rejects with "no device picked" if closed.
+  const device = await connect_device();
+  const id = device.endpoint_id;
 
   // One provisioning per device at a time; picking it again just points at it.
   let row = rows.get(id);
   if (row?.busy) {
-    device.gatt.disconnect();
+    device.disconnect();
     row.highlight();
     return;
   }
-  const again = row !== undefined || id in loadKnown();
   if (!row) {
     row = sessionRow(id);
     rows.set(id, row);
   }
   $sessions.prepend(row.li);
 
-  // The typed name (counting up, so the next device gets the next number), or
-  // the name it had, or its BLE name.
-  const typed = $nextName.value.trim();
-  if (typed) $nextName.value = nextName(typed);
-  const name = typed || row.name || loadKnown()[id]?.name || device.name;
+  // A known device keeps its name and ticket: only the networks change. A new
+  // one gets the typed name (counting up, so the next device gets the next
+  // number), or its BLE name.
+  const known = loadKnown()[id];
+  let name;
+  if (known?.ticket) {
+    name = known.name;
+  } else {
+    const typed = $nextName.value.trim();
+    if (typed) $nextName.value = nextName(typed);
+    name = typed || device.ble_name;
+  }
   row.setName(name);
-  row.showTicket(undefined);
+  row.showTicket(known?.ticket);
   row.busy = true;
-  row.setState(
-    "connecting",
-    again ? "provisioning again: the earlier ticket stops working" : "",
-  );
+  const note = known?.ticket ? "provisioning again: name and ticket stay the same" : "";
+  row.setState("connecting", note);
 
   let done = false;
-  let sent = []; // SSIDs in the last message, to name the one that joined
-  let ticket; // valid once the device accepts the message it belongs to
-
-  device.addEventListener("gattserverdisconnected", () => {
+  device.on_disconnect(() => {
     row.busy = false;
     row.showRetry(false);
     // After success the device turns Bluetooth off; anything else is a loss.
     if (!done) row.setState("disconnected", "lost the Bluetooth connection; provision it again");
   });
 
-  try {
-    const credentialsChar = await service.getCharacteristic(credentials_uuid());
-    const statusChar = await service.getCharacteristic(status_uuid());
-    statusChar.addEventListener("characteristicvaluechanged", (e) => {
-      const status = decode_status(bytes(e.target.value));
-      if (status.state === "connected") {
-        done = true;
-        const ssid = sent[status.network] ?? "?";
-        row.setState("connected", `joined ${ssid}, ${status.detail}`);
-        row.showTicket(ticket);
-        remember(id, name, ssid, ticket);
-      } else {
-        row.setState(status.state, status.detail);
-      }
-      row.showRetry(status.state === "failed");
+  const send = async () => {
+    const list = networks();
+    if (list.length === 0) throw new Error("enter at least one network first");
+    row.showRetry(false);
+    row.setState("sending", note || "encrypting to the endpoint id above");
+    const result = await device.provision(
+      list.map((n) => n.ssid),
+      list.map((n) => n.password),
+      name,
+      known?.ticket ?? null,
+      (state, detail) => row.setState(state, detail),
+    );
+    done = true;
+    row.setState("connected", `joined ${result.ssid}, IP ${result.ip}`);
+    row.showTicket(result.ticket);
+    remember(id, name, result.ssid, result.ticket);
+  };
+  const attempt = () =>
+    send().catch((err) => {
+      if (done) return;
+      row.setState("failed", err.message ?? `${err}`);
+      row.showRetry(row.busy);
     });
-    await statusChar.startNotifications();
-
-    const send = async () => {
-      const list = networks();
-      if (list.length === 0) throw new Error("enter at least one network first");
-      const sealed = provision(
-        identity,
-        list.map((n) => n.ssid),
-        list.map((n) => n.password),
-        name,
-      );
-      sent = list.map((n) => n.ssid);
-      ticket = sealed.ticket;
-      row.showRetry(false);
-      // Up to 508 bytes: longer than the default 20 byte ATT payload, which
-      // the browser handles (larger MTU, or a long write) transparently.
-      await credentialsChar.writeValueWithResponse(sealed.message);
-    };
-    row.onRetry(() =>
-      send().catch((err) => {
-        row.setState("failed", `${err}`);
-        row.showRetry(true);
-      }),
-    );
-    row.setState(
-      "sending",
-      again
-        ? "provisioning again: the earlier ticket stops working"
-        : "encrypting to the endpoint id above",
-    );
-    await send();
-  } catch (err) {
-    row.setState("failed", `${err}`);
-    console.error(err);
-    device.gatt.disconnect();
-  }
+  row.onRetry(attempt);
+  await attempt();
 }
 
 $provision.addEventListener("click", async () => {
@@ -305,7 +263,7 @@ $provision.addEventListener("click", async () => {
   try {
     await provisionDevice();
   } catch (err) {
-    if (err.name === "NotFoundError") return; // picker closed
+    if (`${err.message}`.includes("no device picked")) return; // picker closed
     $provisionResult.textContent = `${err}`;
     $provisionResult.classList.add("error");
     console.error(err);

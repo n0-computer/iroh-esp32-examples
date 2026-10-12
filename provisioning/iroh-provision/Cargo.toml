@@ -1,15 +1,17 @@
 [package]
-name = "provisioning-proto"
+name = "iroh-provision"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "Wire format and crypto for provisioning WiFi credentials to an ESP32 over BLE"
+description = "Provision WiFi credentials to iroh devices, encrypted to their endpoint id"
 
 [features]
 default = []
-# Sender side (the browser): sealing needs an RNG for the ephemeral key and the
-# pairing secret. The device only opens, so it doesn't enable this.
-seal = ["hpke/getrandom", "dep:getrandom"]
+# Client side: sealing needs an RNG for the HPKE ephemeral key and the pairing
+# secret; plus the Session workflow over a Transport.
+client = ["hpke/getrandom", "dep:getrandom"]
+# Device side: identity, storage, joining networks, the provisioning loop.
+device = ["dep:log"]
 
 [dependencies]
 # The endpoint's own key types. The ed25519 keys underneath (ed25519-dalek) also
@@ -21,8 +23,9 @@ postcard = { version = "1.1.1", default-features = false, features = ["alloc"] }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 # Pairing tickets.
 data-encoding = "2"
-# Pairing secrets (sender side only).
+n0-error = "1.0.1"
 getrandom = { version = "0.4", optional = true }
+log = { version = "0.4", optional = true }
 
 [dev-dependencies]
-hpke = { version = "0.14", default-features = false, features = ["getrandom"] }
+futures = { version = "0.3", default-features = false, features = ["std", "executor"] }

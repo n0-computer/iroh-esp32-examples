@@ -1,41 +1,10 @@
-//! Provisioning WiFi credentials to an ESP32 over BLE, encrypted to the device's
-//! iroh identity.
-//!
-//! The device generates an ed25519 key on first boot (its iroh endpoint id) and
-//! exposes the public half over BLE. The provisioning client seals the WiFi
-//! credentials to that key with HPKE (RFC 9180, DHKEM(X25519, HKDF-SHA256) +
-//! ChaCha20Poly1305), using the X25519 form of the ed25519 key. So the password
-//! never crosses the air in the clear, and only the holder of the endpoint's
-//! secret key can open it — the same key that later authenticates every iroh
-//! connection to the device.
-//!
-//! The same message carries a name for the device and a pairing secret chosen
-//! by the client. The client combines the secret with the endpoint id into a
-//! single-use [`PairingTicket`]: the endpoint id alone is public, so it can't
-//! be what authorizes control. Whoever redeems the ticket over iroh first
-//! becomes an owner, authenticated from then on by their own endpoint id.
-//!
-//! This defeats passive sniffing. It does not, by itself, defeat an active
-//! attacker impersonating the device during provisioning: for that, compare the
-//! endpoint id the client shows with the one the device prints on its serial
-//! console.
-//!
-//! Everything is encoded with postcard: the sealed [`Message`], the
-//! [`Status`], the [`PairingTicket`] payload, and the [`Credentials`] the device
-//! stores.
-//!
-//! # GATT layout
-//!
-//! One primary service ([`SERVICE_UUID`]) with three characteristics:
-//!
-//! - [`IDENTITY_UUID`] (read): the 32 byte ed25519 public key.
-//! - [`CREDENTIALS_UUID`] (write): a sealed [`Message`], see [`seal`].
-//! - [`STATUS_UUID`] (read, notify): the encoded [`Status`].
+//! Wire and storage formats, and sealing to the device's identity.
 
 use hpke::{
     aead::ChaCha20Poly1305, kdf::HkdfSha256, kem::X25519HkdfSha256, Deserializable, OpModeR,
 };
 use iroh_base::{PublicKey, SecretKey};
+use n0_error::{e, stack_error};
 use serde::{Deserialize, Serialize};
 
 pub const SERVICE_UUID: &str = "08c6b3c5-8a57-40af-8eec-45a746f70d3f";
@@ -95,7 +64,7 @@ impl Network {
             || self.ssid.len() > MAX_SSID_LEN
             || self.password.len() > MAX_PASSWORD_LEN
         {
-            return Err(Error::InvalidCredentials);
+            return Err(e!(Error::InvalidCredentials));
         }
         Ok(())
     }
@@ -114,14 +83,14 @@ impl Credentials {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
-        let creds: Self = postcard::from_bytes(bytes).map_err(|_| Error::InvalidCredentials)?;
+        let creds: Self = postcard::from_bytes(bytes).map_err(|_| e!(Error::InvalidCredentials))?;
         creds.validate()?;
         Ok(creds)
     }
 
     fn validate(&self) -> Result<(), Error> {
         if self.networks.is_empty() || self.networks.len() > MAX_NETWORKS {
-            return Err(Error::InvalidCredentials);
+            return Err(e!(Error::InvalidCredentials));
         }
         self.networks.iter().try_for_each(Network::validate)
     }
@@ -139,7 +108,7 @@ impl std::fmt::Debug for PairingSecret {
 
 impl PairingSecret {
     /// A fresh secret from the OS RNG (`crypto.getRandomValues` in a browser).
-    #[cfg(feature = "seal")]
+    #[cfg(feature = "client")]
     pub fn generate() -> Self {
         let mut secret = [0u8; PAIRING_SECRET_LEN];
         getrandom::fill(&mut secret).expect("no system RNG");
@@ -170,7 +139,7 @@ pub struct Provisioning {
 impl Provisioning {
     fn validate(&self) -> Result<(), Error> {
         if self.name.len() > MAX_NAME_LEN {
-            return Err(Error::InvalidCredentials);
+            return Err(e!(Error::InvalidCredentials));
         }
         self.credentials.validate()
     }
@@ -233,7 +202,7 @@ fn decode_enum<T: serde::de::DeserializeOwned>(
 ) -> Result<T, Error> {
     // Postcard writes the variant index as a varint u32.
     match postcard::take_from_bytes::<u32>(bytes) {
-        Ok((index, _)) if index >= known => Err(Error::Unsupported),
+        Ok((index, _)) if index >= known => Err(e!(Error::Unsupported)),
         _ => postcard::from_bytes(bytes).map_err(|_| invalid),
     }
 }
@@ -254,52 +223,44 @@ impl std::str::FromStr for PairingTicket {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Error> {
-        let encoded = s.strip_prefix(TICKET_PREFIX).ok_or(Error::Malformed)?;
+        let encoded = s.strip_prefix(TICKET_PREFIX).ok_or(e!(Error::Malformed))?;
         let bytes = data_encoding::BASE32_NOPAD
             .decode(encoded.to_ascii_uppercase().as_bytes())
-            .map_err(|_| Error::Malformed)?;
-        match decode_enum(&bytes, TicketPayload::VERSIONS, Error::Malformed)? {
+            .map_err(|_| e!(Error::Malformed))?;
+        match decode_enum(&bytes, TicketPayload::VERSIONS, e!(Error::Malformed))? {
             TicketPayload::V0 { endpoint, secret } => Ok(PairingTicket { endpoint, secret }),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[stack_error(derive, add_meta)]
+#[non_exhaustive]
 pub enum Error {
     /// Not a message this version understands, or truncated.
-    Malformed,
+    #[error("malformed message")]
+    Malformed {},
     /// HPKE open failed: sealed to a different key, or tampered with.
-    Decrypt,
+    #[error("decryption failed")]
+    Decrypt {},
     /// Decrypted fine, but doesn't decode, or no networks, too many, or an
     /// SSID, password or name out of range.
-    InvalidCredentials,
+    #[error("invalid credentials")]
+    InvalidCredentials {},
     /// The given identity is not a valid ed25519 public key.
-    InvalidIdentity,
+    #[error("invalid identity")]
+    InvalidIdentity {},
     /// Decrypted fine, but is a kind of message (or ticket) this version
     /// doesn't know.
-    Unsupported,
+    #[error("unsupported message")]
+    Unsupported {},
 }
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            Error::Malformed => "malformed message",
-            Error::Decrypt => "decryption failed",
-            Error::InvalidCredentials => "invalid credentials",
-            Error::InvalidIdentity => "invalid identity",
-            Error::Unsupported => "unsupported message",
-        })
-    }
-}
-
-impl std::error::Error for Error {}
 
 /// The X25519 public key HPKE seals to, derived from the ed25519 endpoint id.
-#[cfg_attr(not(feature = "seal"), allow(dead_code))]
+#[cfg_attr(not(feature = "client"), allow(dead_code))]
 fn kem_public_key(identity: &PublicKey) -> Result<<Kem as hpke::Kem>::PublicKey, Error> {
     let montgomery = identity.as_verifying_key().to_montgomery();
     <Kem as hpke::Kem>::PublicKey::from_bytes(&montgomery.to_bytes())
-        .map_err(|_| Error::InvalidIdentity)
+        .map_err(|_| e!(Error::InvalidIdentity))
 }
 
 /// The matching X25519 private key: the ed25519 secret scalar.
@@ -313,7 +274,7 @@ fn kem_private_key(secret: &SecretKey) -> <Kem as hpke::Kem>::PrivateKey {
 /// Wire format: `VERSION | enc (32) | ciphertext | tag (16)`, with the
 /// endpoint id as associated data. The plaintext is the postcard encoded
 /// [`Message`].
-#[cfg(feature = "seal")]
+#[cfg(feature = "client")]
 pub fn seal(identity: &PublicKey, message: &Message) -> Result<Vec<u8>, Error> {
     use hpke::Serializable;
     message.validate()?;
@@ -326,7 +287,7 @@ pub fn seal(identity: &PublicKey, message: &Message) -> Result<Vec<u8>, Error> {
         &plaintext,
         identity.as_bytes(),
     )
-    .map_err(|_| Error::InvalidIdentity)?;
+    .map_err(|_| e!(Error::InvalidIdentity))?;
     let mut out = Vec::with_capacity(1 + ENC_LEN + ciphertext.len());
     out.push(VERSION);
     out.extend_from_slice(&enc.to_bytes());
@@ -336,12 +297,12 @@ pub fn seal(identity: &PublicKey, message: &Message) -> Result<Vec<u8>, Error> {
 
 /// Open a message produced by [`seal`], on the device holding `secret`.
 pub fn open(secret: &SecretKey, sealed: &[u8]) -> Result<Message, Error> {
-    let (&version, rest) = sealed.split_first().ok_or(Error::Malformed)?;
+    let (&version, rest) = sealed.split_first().ok_or(e!(Error::Malformed))?;
     if version != VERSION || rest.len() < ENC_LEN + TAG_LEN {
-        return Err(Error::Malformed);
+        return Err(e!(Error::Malformed));
     }
     let (enc, ciphertext) = rest.split_at(ENC_LEN);
-    let enc = <Kem as hpke::Kem>::EncappedKey::from_bytes(enc).map_err(|_| Error::Malformed)?;
+    let enc = <Kem as hpke::Kem>::EncappedKey::from_bytes(enc).map_err(|_| e!(Error::Malformed))?;
     let plaintext = hpke::single_shot_open::<Aead, Kdf, Kem>(
         &OpModeR::Base,
         &kem_private_key(secret),
@@ -350,8 +311,8 @@ pub fn open(secret: &SecretKey, sealed: &[u8]) -> Result<Message, Error> {
         ciphertext,
         secret.public().as_bytes(),
     )
-    .map_err(|_| Error::Decrypt)?;
-    let message: Message = decode_enum(&plaintext, Message::KINDS, Error::InvalidCredentials)?;
+    .map_err(|_| e!(Error::Decrypt))?;
+    let message: Message = decode_enum(&plaintext, Message::KINDS, e!(Error::InvalidCredentials))?;
     message.validate()?;
     Ok(message)
 }
@@ -370,6 +331,25 @@ pub enum Failure {
     NotFound,
     /// A kind of [`Message`] this firmware doesn't know.
     Unsupported,
+}
+
+impl std::fmt::Display for Failure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.describe())
+    }
+}
+
+impl Failure {
+    /// A short explanation for users.
+    pub fn describe(&self) -> &'static str {
+        match self {
+            Failure::BadMessage => "the device could not open the message",
+            Failure::WifiConnect => "could not join: probably a wrong password",
+            Failure::NoIp => "joined, but got no IP address",
+            Failure::NotFound => "none of the networks is in range",
+            Failure::Unsupported => "the device's firmware is too old for this client",
+        }
+    }
 }
 
 /// Device state, as exposed on the status characteristic.
@@ -438,7 +418,7 @@ mod tests {
         assert!(Credentials::from_bytes(b"\x00").is_err());
     }
 
-    #[cfg(feature = "seal")]
+    #[cfg(feature = "client")]
     mod sealed {
         use super::*;
 
@@ -496,13 +476,13 @@ mod tests {
             )
             .unwrap();
             let sealed = [&[VERSION][..], &enc.to_bytes(), &ct].concat();
-            assert_eq!(open(&sk, &sealed), Err(Error::Unsupported));
+            assert!(matches!(open(&sk, &sealed), Err(Error::Unsupported { .. })));
         }
 
         #[test]
         fn wrong_key() {
             let sealed = seal(&key(1).public(), &msg()).unwrap();
-            assert_eq!(open(&key(2), &sealed), Err(Error::Decrypt));
+            assert!(matches!(open(&key(2), &sealed), Err(Error::Decrypt { .. })));
         }
 
         #[test]
@@ -510,28 +490,37 @@ mod tests {
             let sk = key(1);
             let mut sealed = seal(&sk.public(), &msg()).unwrap();
             *sealed.last_mut().unwrap() ^= 1;
-            assert_eq!(open(&sk, &sealed), Err(Error::Decrypt));
+            assert!(matches!(open(&sk, &sealed), Err(Error::Decrypt { .. })));
             sealed[0] = 2;
-            assert_eq!(open(&sk, &sealed), Err(Error::Malformed));
-            assert_eq!(open(&sk, &sealed[..10]), Err(Error::Malformed));
+            assert!(matches!(open(&sk, &sealed), Err(Error::Malformed { .. })));
+            assert!(matches!(
+                open(&sk, &sealed[..10]),
+                Err(Error::Malformed { .. })
+            ));
         }
 
         #[test]
         fn rejects_bad_credentials() {
             let id = key(1).public();
             let bad = |networks| seal(&id, &provision(networks, "x"));
-            assert_eq!(bad(vec![]), Err(Error::InvalidCredentials));
-            assert_eq!(bad(vec![network("", "")]), Err(Error::InvalidCredentials));
-            assert_eq!(
+            assert!(matches!(bad(vec![]), Err(Error::InvalidCredentials { .. })));
+            assert!(matches!(
+                bad(vec![network("", "")]),
+                Err(Error::InvalidCredentials { .. })
+            ));
+            assert!(matches!(
                 bad(vec![network(&"x".repeat(33), "")]),
-                Err(Error::InvalidCredentials)
-            );
-            assert_eq!(
+                Err(Error::InvalidCredentials { .. })
+            ));
+            assert!(matches!(
                 bad(vec![network("a", ""); MAX_NETWORKS + 1]),
-                Err(Error::InvalidCredentials)
-            );
+                Err(Error::InvalidCredentials { .. })
+            ));
             let long_name = provision(vec![network("a", "")], &"n".repeat(MAX_NAME_LEN + 1));
-            assert_eq!(seal(&id, &long_name), Err(Error::InvalidCredentials));
+            assert!(matches!(
+                seal(&id, &long_name),
+                Err(Error::InvalidCredentials { .. })
+            ));
         }
 
         #[test]
@@ -551,7 +540,10 @@ mod tests {
                     .encode(&[1; 65])
                     .to_ascii_lowercase()
             );
-            assert_eq!(newer.parse::<PairingTicket>(), Err(Error::Unsupported));
+            assert!(matches!(
+                newer.parse::<PairingTicket>(),
+                Err(Error::Unsupported { .. })
+            ));
             assert!(s[4..].parse::<PairingTicket>().is_err());
         }
 

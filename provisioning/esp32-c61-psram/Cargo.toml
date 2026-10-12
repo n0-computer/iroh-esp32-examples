@@ -24,11 +24,11 @@ codegen-units = 1
 
 [dependencies]
 log = "0.4"
-# 0.53 because esp32-nimble 0.13 requires it. (The C61 needs >= 0.52 anyway.)
+# 0.53 to match iroh-provision-esp-idf (esp32-nimble 0.13 requires it). The C61
+# needs >= 0.52 anyway.
 esp-idf-svc = "0.53"
-esp32-nimble = "0.13"
-iroh-base = { version = "1.3", default-features = false, features = ["key"] }
-provisioning-proto = { path = "../proto" }
+iroh-provision = { path = "../iroh-provision", features = ["device"] }
+iroh-provision-esp-idf = { path = "../iroh-provision-esp-idf" }
 
 [build-dependencies]
 embuild = "0.33"

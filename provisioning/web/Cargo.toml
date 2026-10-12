@@ -3,7 +3,7 @@ name = "provisioning-web"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "Browser client for BLE WiFi provisioning: Web Bluetooth in JS, sealing in Rust/wasm"
+description = "Browser page for provisioning iroh devices over Web Bluetooth"
 
 [lib]
 crate-type = ["cdylib"]
@@ -13,9 +13,14 @@ crate-type = ["cdylib"]
 # CLI versions MUST match exactly or the generated JS bindings are rejected.
 wasm-bindgen = "=0.2.126"
 console_error_panic_hook = "0.1.7"
-provisioning-proto = { path = "../proto", features = ["seal"] }
-iroh-base = { version = "1.3", default-features = false, features = ["key"] }
-# HPKE's ephemeral key needs randomness; on wasm32 route it to crypto.getRandomValues.
+js-sys = "0.3"
+# Async exports (connect_device, Device::provision) become JS promises.
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = ["BluetoothDevice", "BluetoothRemoteGattServer", "EventTarget"] }
+iroh-provision = { path = "../iroh-provision", features = ["client"] }
+iroh-provision-ble = { path = "../iroh-provision-ble", features = ["web"] }
+# HPKE's ephemeral key and the pairing secret need randomness; on wasm32 route it
+# to crypto.getRandomValues.
 getrandom = { version = "0.4", features = ["wasm_js"] }
 
 [profile.release]
