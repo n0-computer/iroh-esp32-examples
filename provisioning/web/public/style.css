@@ -1,0 +1,229 @@
+:root {
+  color-scheme: light dark;
+  --accent: #6b4eff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  display: flex;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+main {
+  width: 100%;
+  max-width: 40rem;
+}
+
+h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.6rem;
+}
+
+.subtitle {
+  margin: 0 0 1.5rem;
+  opacity: 0.7;
+}
+
+.card {
+  border: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.endpoint-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95rem;
+  word-break: break-all;
+  cursor: pointer;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+input {
+  font: inherit;
+  padding: 0.5rem 0.65rem;
+  border-radius: 0.5rem;
+  border: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  background: transparent;
+  color: inherit;
+}
+
+input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.result {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+  word-break: break-word;
+  min-height: 1.4rem;
+}
+
+.result.error {
+  color: #d33;
+}
+
+.hint {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+
+button.link {
+  align-self: flex-start;
+  background: none;
+  color: var(--accent);
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-decoration: underline;
+}
+
+button.link:disabled {
+  opacity: 0.5;
+}
+
+.card + .card {
+  margin-top: 1rem;
+}
+
+.status {
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+
+.state {
+  font-weight: 600;
+}
+
+.state.connected {
+  color: #2a9d55;
+}
+
+.state.failed {
+  color: #d33;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.network {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+@media (max-width: 30rem) {
+  .network {
+    grid-template-columns: 1fr;
+  }
+}
+
+.known {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.known code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  word-break: break-all;
+  opacity: 0.8;
+}
+
+.devices {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.session {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+
+.session-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  align-items: baseline;
+}
+
+.session .id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  word-break: break-all;
+  opacity: 0.8;
+}
+
+.session .detail {
+  font-size: 0.9rem;
+}
+
+.state.disconnected {
+  color: #d33;
+}
+
+.ticket {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.ticket code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  word-break: break-all;
+}

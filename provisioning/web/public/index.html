@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>iroh provisioning</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./main.js" type="module"></script>
+  </head>
+  <body>
+    <main>
+      <h1>Provision iroh devices</h1>
+      <p class="subtitle">
+        Give ESP32s your WiFi credentials over Bluetooth. They are encrypted to
+        each device's iroh endpoint id, so only that device can read them.
+      </p>
+
+      <div class="card">
+        <label>
+          1. WiFi networks
+          <span class="hint">(a device joins whichever is in range; empty password for an open network)</span>
+        </label>
+        <div id="networks"></div>
+        <button id="add-network" type="button" class="link">add another network</button>
+      </div>
+
+      <div class="card">
+        <label>
+          2. Devices
+          <span class="hint">(repeat for each device; a trailing number counts up; check each endpoint id against its serial console)</span>
+        </label>
+        <input
+          id="next-name"
+          type="text"
+          maxlength="32"
+          placeholder="name for the next device, e.g. lamp-1 (optional)"
+          autocomplete="off"
+        />
+        <button id="provision" type="button" disabled>provision a device</button>
+        <output id="provision-result" class="result"></output>
+        <ul id="sessions" class="devices"></ul>
+      </div>
+
+      <div class="card" id="known" hidden>
+        <label>
+          Provisioned devices
+          <span class="hint">(remembered in this browser; a pairing ticket works once, for whoever redeems it first)</span>
+        </label>
+        <ul id="known-list" class="known"></ul>
+        <button id="forget" type="button" class="link">forget all</button>
+      </div>
+
+      <p class="status" id="status">loading wasm…</p>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,40 @@
+[package]
+name = "provisioning-esp32-c61-psram"
+version = "0.1.0"
+authors = ["Ruediger Klaehn <rklaehn@protonmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+resolver = "2"
+
+[[bin]]
+name = "provisioning-esp32-c61-psram"
+harness = false # do not use the built-in cargo test harness -> resolve rust-analyzer errors
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+debug = true    # Symbols are nice, and they don't increase the size on Flash
+opt-level = "z"
+lto = true
+codegen-units = 1
+
+[dependencies]
+log = "0.4"
+# 0.53 because esp32-nimble 0.13 requires it. (The C61 needs >= 0.52 anyway.)
+esp-idf-svc = "0.53"
+esp32-nimble = "0.13"
+iroh-base = { version = "1.3", default-features = false, features = ["key"] }
+provisioning-proto = { path = "../proto" }
+
+[build-dependencies]
+embuild = "0.33"
+
+# esp32-nimble 0.13 doesn't build against ESP-IDF v5.5 on chips with the ESP NimBLE
+# controller (C5/C6/C61/H2): os_mempool_init got an r_ prefix there. Vendored with a
+# one-line fix in src/l2cap/mod.rs until that's upstream.
+[patch.crates-io]
+esp32-nimble = { path = "../vendor/esp32-nimble" }
