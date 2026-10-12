@@ -227,3 +227,16 @@ button.link:disabled {
   font-size: 0.75rem;
   word-break: break-all;
 }
+
+@keyframes flash {
+  from {
+    outline: 2px solid var(--accent);
+  }
+  to {
+    outline: 2px solid transparent;
+  }
+}
+
+.session.flash {
+  animation: flash 1.2s ease-out;
+}

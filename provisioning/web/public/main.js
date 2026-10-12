@@ -150,32 +150,49 @@ showKnown();
 
 // --- Provisioning sessions --------------------------------------------------
 
-/** One row per device picked in this page, with its own GATT connection. */
-function sessionRow(name) {
+/** Rows by endpoint id: one per device, reused when it's provisioned again. */
+const rows = new Map();
+
+/** The row for a device, with its own GATT connection while one is active. */
+function sessionRow(id) {
   const li = document.createElement("li");
   li.className = "session";
   li.innerHTML = `
     <div class="session-head">
       <strong class="name"></strong>
-      <span class="state">connecting</span>
+      <span class="state"></span>
       <button type="button" class="link retry" hidden>retry with current networks</button>
     </div>
-    <code class="id">—</code>
-    <div class="detail"></div>`;
-  li.querySelector(".name").textContent = name;
-  $sessions.prepend(li);
+    <code class="id"></code>
+    <div class="detail"></div>
+    <div class="ticket-slot"></div>`;
+  li.querySelector(".id").textContent = id;
+  let retry = () => {};
+  li.querySelector(".retry").addEventListener("click", () => retry());
   return {
     li,
-    setId: (id) => (li.querySelector(".id").textContent = id),
-    setState: (state, detail) => {
+    name: undefined,
+    busy: false, // a provisioning attempt with an open connection
+    setName(name) {
+      this.name = name;
+      li.querySelector(".name").textContent = name;
+    },
+    setState(state, detail) {
       const $state = li.querySelector(".state");
       $state.textContent = state;
       $state.className = `state ${state}`;
       li.querySelector(".detail").textContent = detail;
     },
-    onRetry: (handler) => li.querySelector(".retry").addEventListener("click", handler),
+    onRetry: (handler) => (retry = handler),
     showRetry: (show) => (li.querySelector(".retry").hidden = !show),
-    showTicket: (ticket) => li.append(ticketElement(ticket)),
+    showTicket: (ticket) =>
+      li.querySelector(".ticket-slot").replaceChildren(ticket ? ticketElement(ticket) : ""),
+    highlight() {
+      li.scrollIntoView({ block: "nearest" });
+      li.classList.remove("flash");
+      void li.offsetWidth; // restart the animation
+      li.classList.add("flash");
+    },
   };
 }
 
@@ -185,29 +202,50 @@ async function provisionDevice() {
   const device = await navigator.bluetooth.requestDevice({
     filters: [{ services: [service_uuid()] }],
   });
-  // The typed name, or the BLE name if none.
-  const name = $nextName.value.trim() || device.name;
-  // Count up right away, so devices provisioned in parallel get distinct names.
-  if ($nextName.value.trim()) $nextName.value = nextName(name);
-  const row = sessionRow(name);
+  const server = await device.gatt.connect();
+  const service = await server.getPrimaryService(service_uuid());
+  const identity = bytes(await (await service.getCharacteristic(identity_uuid())).readValue());
+  const id = endpoint_id(identity);
+
+  // One provisioning per device at a time; picking it again just points at it.
+  let row = rows.get(id);
+  if (row?.busy) {
+    device.gatt.disconnect();
+    row.highlight();
+    return;
+  }
+  const again = row !== undefined || id in loadKnown();
+  if (!row) {
+    row = sessionRow(id);
+    rows.set(id, row);
+  }
+  $sessions.prepend(row.li);
+
+  // The typed name (counting up, so the next device gets the next number), or
+  // the name it had, or its BLE name.
+  const typed = $nextName.value.trim();
+  if (typed) $nextName.value = nextName(typed);
+  const name = typed || row.name || loadKnown()[id]?.name || device.name;
+  row.setName(name);
+  row.showTicket(undefined);
+  row.busy = true;
+  row.setState(
+    "connecting",
+    again ? "provisioning again: the earlier ticket stops working" : "",
+  );
+
   let done = false;
-  let identity;
   let sent = []; // SSIDs in the last message, to name the one that joined
   let ticket; // valid once the device accepts the message it belongs to
 
   device.addEventListener("gattserverdisconnected", () => {
+    row.busy = false;
     row.showRetry(false);
     // After success the device turns Bluetooth off; anything else is a loss.
     if (!done) row.setState("disconnected", "lost the Bluetooth connection; provision it again");
   });
 
   try {
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(service_uuid());
-    identity = bytes(await (await service.getCharacteristic(identity_uuid())).readValue());
-    const id = endpoint_id(identity);
-    row.setId(id);
-
     const credentialsChar = await service.getCharacteristic(credentials_uuid());
     const statusChar = await service.getCharacteristic(status_uuid());
     statusChar.addEventListener("characteristicvaluechanged", (e) => {
@@ -237,7 +275,7 @@ async function provisionDevice() {
       sent = list.map((n) => n.ssid);
       ticket = sealed.ticket;
       row.showRetry(false);
-      // Up to 443 bytes: longer than the default 20 byte ATT payload, which
+      // Up to 508 bytes: longer than the default 20 byte ATT payload, which
       // the browser handles (larger MTU, or a long write) transparently.
       await credentialsChar.writeValueWithResponse(sealed.message);
     };
@@ -247,7 +285,12 @@ async function provisionDevice() {
         row.showRetry(true);
       }),
     );
-    row.setState("sending", "encrypting to the endpoint id above");
+    row.setState(
+      "sending",
+      again
+        ? "provisioning again: the earlier ticket stops working"
+        : "encrypting to the endpoint id above",
+    );
     await send();
   } catch (err) {
     row.setState("failed", `${err}`);

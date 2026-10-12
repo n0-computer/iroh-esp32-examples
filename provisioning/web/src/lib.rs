@@ -4,7 +4,7 @@
 
 use iroh_base::PublicKey;
 use provisioning_proto::{
-    Credentials, Failure, Network, PairingSecret, PairingTicket, Provisioning, Status,
+    Credentials, Failure, Message, Network, PairingSecret, PairingTicket, Provisioning, Status,
 };
 use wasm_bindgen::prelude::*;
 
@@ -84,11 +84,11 @@ pub fn provision(
         .collect();
     let endpoint = public_key(identity)?;
     let pairing_secret = PairingSecret::generate();
-    let provisioning = Provisioning {
+    let provisioning = Message::Provision(Provisioning {
         credentials: Credentials { networks },
         name,
         pairing_secret: pairing_secret.clone(),
-    };
+    });
     let message = provisioning_proto::seal(&endpoint, &provisioning).map_err(js_err)?;
     let ticket = PairingTicket {
         endpoint,

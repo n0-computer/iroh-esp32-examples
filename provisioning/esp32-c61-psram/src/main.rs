@@ -37,12 +37,12 @@ use esp_idf_svc::wifi::{
 };
 use iroh_base::SecretKey;
 use log::{info, warn};
-use provisioning_proto::{Credentials, Error, Failure, Network, Provisioning, Status};
+use provisioning_proto::{Credentials, Error, Failure, Message, Network, Provisioning, Status};
 
 /// NVS namespace for everything this example stores.
 const NVS_NAMESPACE: &str = "prov";
 const KEY_SECRET: &str = "secret";
-/// The networks, in [`Credentials::encode`] format.
+/// The networks, in [`Credentials::to_bytes`] format (postcard).
 const KEY_NETWORKS: &str = "networks";
 /// The name given at provisioning (may be empty).
 const KEY_NAME: &str = "name";
@@ -152,7 +152,7 @@ fn load_or_create_secret(nvs: &EspNvs<NvsDefault>) -> SecretKey {
 fn load_credentials(nvs: &EspNvs<NvsDefault>) -> Option<Credentials> {
     let mut buf = [0u8; MAX_NETWORKS_LEN];
     let bytes = nvs.get_blob(KEY_NETWORKS, &mut buf).ok()??;
-    Credentials::decode(bytes)
+    Credentials::from_bytes(bytes)
         .inspect_err(|e| warn!("Ignoring stored networks: {e}"))
         .ok()
 }
@@ -168,7 +168,7 @@ fn load_name(nvs: &EspNvs<NvsDefault>) -> Option<String> {
 fn store_provisioning(nvs: &EspNvs<NvsDefault>, provisioning: &Provisioning) {
     let networks = provisioning
         .credentials
-        .encode()
+        .to_bytes()
         .expect("validated when opened");
     nvs.set_blob(KEY_NETWORKS, &networks)
         .and_then(|_| nvs.set_str(KEY_NAME, &provisioning.name))
@@ -350,7 +350,7 @@ fn provision(
     let ip = loop {
         let message = rx.recv().expect("BLE callback dropped");
         let provisioning = match provisioning_proto::open(secret, &message) {
-            Ok(provisioning) => provisioning,
+            Ok(Message::Provision(provisioning)) => provisioning,
             Err(e) => {
                 warn!("Rejected credentials message: {e}");
                 set_status(Status::Failed(match e {
