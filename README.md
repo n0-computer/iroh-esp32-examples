@@ -23,6 +23,10 @@ Each keeps the largest configuration that runs *reliably* on that board:
   (dialable across networks), tuned to fit the C61's tighter internal SRAM — small
   buffers + a 96 KB stack (see its README). Needs newer tooling (ESP-IDF v5.5.2+,
   esp-idf-svc 0.52, espflash 4.4).
+- [`server-esp32-c5-psram/`](server-esp32-c5-psram/README.md) — ESP32-C5, the
+  **RISC-V + PSRAM** variant with **dual-band WiFi 6**. Tested on the Seeed Studio
+  XIAO ESP32-C5 (8 MB PSRAM). Runs the **full relay + pkarr discovery** build with
+  the C61's memory settings; same newer tooling as the C61.
 - [`server-esp32-p4/`](server-esp32-p4/README.md) — ESP32-P4, the big dual-core
   **RISC-V** application chip (`riscv32imafc-esp-espidf` — it has an FPU), 768 KB
   SRAM, 32 MB in-package PSRAM — and **no radio of its own**: WiFi comes from
@@ -50,10 +54,10 @@ instructions.
 
 ## Hardware variants
 
-| [![M5StickC PLUS2](images/m5stickc-plus2.jpg)](server-esp32-psram/README.md) | [![ESP32-S3 with PSRAM](images/esp32-s3.jpg)](server-esp32-s3-psram/README.md) | [![Bare ESP32 (LX6)](images/esp32.jpg)](server-esp32/README.md) | [![Bare ESP32-S3](images/esp32-s3.jpg)](server-esp32-s3/README.md) | [![ESP32-C6-DevKitC-1](images/esp32-c6.png)](server-esp32-c6/README.md) |
-| :---: | :---: | :---: | :---: | :---: |
-| **M5StickC PLUS2 / ESP32-WROVER**<br>(LX6, with PSRAM) | **ESP32-S3**<br>(with PSRAM) | **Bare ESP32** (LX6)<br>(no PSRAM) | **Bare ESP32-S3**<br>(no PSRAM) | **ESP32-C6**<br>(RISC-V, no PSRAM) |
-| [`server-esp32-psram/`](server-esp32-psram/README.md) | [`server-esp32-s3-psram/`](server-esp32-s3-psram/README.md) | [`server-esp32/`](server-esp32/README.md) | [`server-esp32-s3/`](server-esp32-s3/README.md) | [`server-esp32-c6/`](server-esp32-c6/README.md) |
+| [![M5StickC PLUS2](images/m5stickc-plus2.jpg)](server-esp32-psram/README.md) | [![ESP32-S3 with PSRAM](images/esp32-s3.jpg)](server-esp32-s3-psram/README.md) | [![Bare ESP32 (LX6)](images/esp32.jpg)](server-esp32/README.md) | [![Bare ESP32-S3](images/esp32-s3.jpg)](server-esp32-s3/README.md) | [![ESP32-C6-DevKitC-1](images/esp32-c6.png)](server-esp32-c6/README.md) | [![XIAO ESP32-C5](images/xiao-esp32-c5.jpg)](server-esp32-c5-psram/README.md) |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **M5StickC PLUS2 / ESP32-WROVER**<br>(LX6, with PSRAM) | **ESP32-S3**<br>(with PSRAM) | **Bare ESP32** (LX6)<br>(no PSRAM) | **Bare ESP32-S3**<br>(no PSRAM) | **ESP32-C6**<br>(RISC-V, no PSRAM) | **XIAO ESP32-C5**<br>(RISC-V, with PSRAM) |
+| [`server-esp32-psram/`](server-esp32-psram/README.md) | [`server-esp32-s3-psram/`](server-esp32-s3-psram/README.md) | [`server-esp32/`](server-esp32/README.md) | [`server-esp32-s3/`](server-esp32-s3/README.md) | [`server-esp32-c6/`](server-esp32-c6/README.md) | [`server-esp32-c5-psram/`](server-esp32-c5-psram/README.md) |
 
 ## Which server variant?
 
@@ -66,6 +70,8 @@ instructions.
 - Bare ESP32 (LX6)? Use [`server-esp32/`](server-esp32/README.md).
 - Bare ESP32-S3? Use [`server-esp32-s3/`](server-esp32-s3/README.md).
 - ESP32-C6 (RISC-V)? Use [`server-esp32-c6/`](server-esp32-c6/README.md).
+- ESP32-C5 with PSRAM (e.g. Seeed Studio XIAO ESP32-C5)? Use
+  [`server-esp32-c5-psram/`](server-esp32-c5-psram/README.md) — relay + discovery.
 - ESP32-P4 (RISC-V, no radio) on a board with an ESP32-C6 companion (e.g.
   Waveshare P4-NANO)? Use [`server-esp32-p4/`](server-esp32-p4/README.md) —
   relay + discovery, WiFi via ESP-Hosted.
@@ -86,7 +92,7 @@ We do support both CPU architectures, XTensa for ESP32 and ESP32-S3, RISC-V for 
 
 ### Flash size
 
-All seven release applications fit a 4 MiB single-app flash layout. Flash capacity does not establish runtime RAM headroom.
+All eight release applications fit a 4 MiB single-app flash layout. Flash capacity does not establish runtime RAM headroom.
 
 ### PSRAM
 
