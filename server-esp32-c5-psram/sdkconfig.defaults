@@ -1,0 +1,78 @@
+# Flash size — pin it explicitly. ESP-IDF defaults to 2 MB; if the board is larger
+# the auto-generated partition table can land wrong, which shows up as an MMU
+# alignment assert in `mmu_hal_map_region` while loading the partition table at
+# boot. 4 MB is safe even on this 8 MB board (under-reporting is fine; over-
+# reporting is not) and the slim app fits comfortably.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Tokio current_thread runtime runs all async tasks on this single stack, so it
+# has to hold the deepest path — here the relay path (RelayActor + the pkarr
+# reqwest/rustls DoH clients). 49 KB overflowed in RelayActor::active_relay_handle
+# (SP ran ~8.7 KB past the floor → stack-protection fault), so bump to 96 KB.
+# (hickory is gone on refactor-hickory, so we don't need the s3's 114 KB.) NOTE:
+# this stack lives in INTERNAL SRAM, not PSRAM (RISC-V main task) — every KB here
+# is a KB the relay's internal-only allocations (FreeRTOS mutexes/DMA) can't use,
+# which is why the WiFi/lwIP buffers below stay small. RISC-V also spills more than
+# Xtensa (no register windows), so it needs more than the LX7/S3 for the same code.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=98304
+
+# Use this to set FreeRTOS kernel tick frequency to 1000 Hz (100 Hz by default).
+# This allows to use 1 ms granularity for thread sleeps (10 ms by default).
+#CONFIG_FREERTOS_HZ=1000
+
+# We use rustls, not mbedtls - disable to save RAM and flash
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=n
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=n
+CONFIG_MBEDTLS_TLS_ENABLED=n
+
+# Enable PSRAM. Unlike the C6 (no PSRAM interface at all), the ESP32-C5 has an
+# SPI PSRAM interface; the XIAO ESP32-C5 has 8 MB on it. The gate is the
+# chip-independent CONFIG_SPIRAM symbol — the esp32-only
+# CONFIG_ESP32_SPIRAM_SUPPORT alias does NOT exist for this RISC-V part and would
+# be silently ignored → PSRAM never inits → back to internal SRAM. The PSRAM is
+# QUAD (the ESP-IDF default), so we do NOT set MODE_OCT — that is the S3's
+# octal-part knob and would fail to init here.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=0
+CONFIG_SPIRAM_MALLOC_RESERVE_INTERNAL=0
+# Allow task stacks in PSRAM — frees internal SRAM for FreeRTOS/lwIP.
+CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
+
+# WiFi buffers — CONFIG_ESP_WIFI_* are the canonical, chip-independent symbols.
+# The slim LAN-direct echo doesn't need throughput; cut static buffers to the floor
+# (these are internal SRAM, pre-allocated). With PSRAM these cuts just leave
+# headroom, but there's no reason to grow them for an echo.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER=y
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+
+# lwIP buffers — small. This variant is LAN-direct (no relay/pkarr → no TCP): QUIC/
+# SNTP/DNS are all UDP. Floor the TCP windows for hygiene; keep UDP mbox moderate
+# so QUIC rx bursts aren't dropped.
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=12
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880
+CONFIG_LWIP_TCP_WND_DEFAULT=2880
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=8
+CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=4096
+CONFIG_LWIP_MAX_UDP_PCBS=6
+CONFIG_LWIP_MAX_SOCKETS=6
+
+# IPv6 off: IPv4-only home/factory WLAN. iroh handles the v6 bind failure
+# gracefully ("ignoring non required bind failure").
+CONFIG_LWIP_IPV6=n
+
+# Use the ROM's nano printf/scanf: smaller formatting code AND a lower stack
+# footprint on the format path.
+CONFIG_NEWLIB_NANO_FORMAT=y
+
+# Restore colored log output. ESP-IDF flipped CONFIG_LOG_COLORS to default-off
+# between v5.3 (the C6, colored) and v5.5 (this target). Turn it back on.
+CONFIG_LOG_COLORS=y
+
+# Detect stack overflow via hardware watchpoint (uses 1 of 2 debug watchpoints)
+CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK=y
