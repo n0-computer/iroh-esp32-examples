@@ -1,0 +1,26 @@
+[build]
+# ESP32-C5: single-core 32-bit RISC-V (RV32IMAC — has the `a` atomics extension,
+# unlike the C3's imc). Same rust target as the C6/C61/H2. Keep MCU in [env] below
+# in sync with this target.
+target = "riscv32imac-esp-espidf"
+
+[target.riscv32imac-esp-espidf]
+linker = "ldproxy"
+# Only the flasher resets the chip. On the C5 the monitor's own reset, right
+# after the flasher's, lands in download mode ("waiting for download") instead
+# of running the app. `--no-reset` needs `--non-interactive`, so the monitor has
+# no CTRL+R.
+runner = "espflash flash --monitor --non-interactive --no-reset"
+rustflags = [ "--cfg",  "espidf_time64"]
+
+[unstable]
+build-std = ["std", "panic_abort"]
+# Build std/core/alloc with size-first codegen. Behavior-neutral; ~181 KB off
+# .flash.text. Keep this on.
+build-std-features = ["optimize_for_size"]
+
+[env]
+MCU="esp32c5"
+# Note: this variable is not used by the pio builder (`cargo build --features pio`)
+# The ESP32-C5 became a stable ESP-IDF target in v5.5; pin the latest v5.5 patch.
+ESP_IDF_VERSION = "v5.5.4"

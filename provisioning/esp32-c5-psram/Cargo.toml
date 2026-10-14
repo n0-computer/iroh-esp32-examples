@@ -1,5 +1,5 @@
 [package]
-name = "provisioning-esp32-c61-psram"
+name = "provisioning-esp32-c5-psram"
 version = "0.1.0"
 authors = ["Ruediger Klaehn <rklaehn@protonmail.com>"]
 edition = "2021"
@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 resolver = "2"
 
 [[bin]]
-name = "provisioning-esp32-c61-psram"
+name = "provisioning-esp32-c5-psram"
 harness = false # do not use the built-in cargo test harness -> resolve rust-analyzer errors
 
 [profile.release]
@@ -24,7 +24,7 @@ codegen-units = 1
 
 [dependencies]
 log = "0.4"
-# 0.53 to match iroh-provision-esp-idf (esp32-nimble 0.13 requires it). The C61
+# 0.53 to match iroh-provision-esp-idf (esp32-nimble 0.13 requires it). The C5
 # needs >= 0.52 anyway.
 esp-idf-svc = "0.53"
 iroh-provision = { path = "../iroh-provision", features = ["device"] }

@@ -21,7 +21,7 @@ Separate Cargo projects, like the rest of this repo:
 | [`iroh-provision/`](iroh-provision/) | the library: formats, sealing, client `Session`, device logic; platform independent, tested without hardware |
 | [`iroh-provision-ble/`](iroh-provision-ble/) | client transports: btleplug (`native`) and Web Bluetooth (`web`); plus the CLI example |
 | [`iroh-provision-esp-idf/`](iroh-provision-esp-idf/) | device side on ESP-IDF: NimBLE GATT service, NVS, WiFi, reset button |
-| [`esp32-c61-psram/`](esp32-c61-psram/src/main.rs) | the firmware: about 40 lines on top of the above |
+| [`esp32-c5-psram/`](esp32-c5-psram/src/main.rs) | the firmware for the XIAO ESP32-C5: about 40 lines on top of the above |
 | [`web/`](web/) | the page: wasm binding over the client `Session`, JS only for the UI |
 | `vendor/esp32-nimble/` | [esp32-nimble] 0.13 with a fix, see [below](#vendored-esp32-nimble) |
 
@@ -36,34 +36,39 @@ it advertises over BLE as `<kind>-<short endpoint id>` (`demo-a77370c66d`;
 the kind is `KIND` in `main.rs`) until a working set arrives, then turns BLE
 off.
 
-The RGB LED shows the state: blinking yellow while waiting for provisioning,
-yellow and green alternating while joining WiFi, solid green once joined.
+The user LED shows the state: blinking slowly while waiting for provisioning,
+fast while joining WiFi, off once joined.
 
-Same toolchain as [`server-esp32-c61-psram`](../server-esp32-c61-psram/README.md#toolchain-requirements)
-(ESP-IDF v5.5.2+, espflash 4.4+), with esp-idf-svc 0.53 because esp32-nimble
+WiFi and Bluetooth share one radio. `StationWifi` gives WiFi priority
+(`esp_coex_preference_set`): with Bluetooth compiled in, the coexistence
+arbiter otherwise keeps radio time for it even when it isn't running, and the
+device misses much of what other devices on the LAN send (no ping, no direct
+connections, only traffic it asked for). Joining waits up to 60 seconds, not
+`BlockingWifi`'s 15: with BLE active and both bands to scan, the C5 often needs
+more.
+
+Same toolchain as [`server-esp32-c5-psram`](../server-esp32-c5-psram/README.md#toolchain-requirements)
+(ESP-IDF v5.5, a recent espflash), with esp-idf-svc 0.53 because esp32-nimble
 0.13 requires it.
 
 ```sh
-cd esp32-c61-psram
+cd esp32-c5-psram
 cargo run --release
 ```
 
 The serial log shows `Endpoint ID: …` and then `Advertising as demo-…`.
 
-- The first build downloads ESP-IDF. If you already built `server-esp32-c61-psram`,
-  `ln -s ../../server-esp32-c61-psram/.embuild .embuild` reuses its copy.
-- The cargo runner flashes with `--after no-reset`, so only the monitor resets the
-  chip. With espflash's default, the reset after flashing and the monitor's reset
-  land within milliseconds, and the C61 ends up in a ROM watchdog loop
-  (`rst:0x7 (TG0_WDT_HPSYS)` over and over) that only unplugging fixes.
+- The first build downloads ESP-IDF. If you already built `server-esp32-c5-psram`,
+  `ln -s ../../server-esp32-c5-psram/.embuild .embuild` reuses its copy.
+- The cargo runner flashes with `--no-reset`, so only the flasher resets the
+  chip. With espflash's default, the monitor resets it again right after, and
+  the C5 lands in download mode (`waiting for download`) instead of running the
+  app.
 - Flashing this image onto another chip (e.g. a C6) fails before `main` with an
   "Illegal instruction" panic; `espflash board-info` tells you what's connected.
-- The BOOT pin is set in `main.rs`: GPIO9 on the ESP32-C61 DevKit. Other boards
-  differ; the XIAO ESP32-C5 uses GPIO28.
-- The LED is board specific too. The C61 DevKit only has an RGB LED (WS2812 on
-  GPIO8), driven over SPI because the C61 has no RMT ([`rgb_led.rs`](esp32-c61-psram/src/rgb_led.rs),
-  from iroh-co2-monitor). Boards with a plain LED use `BlinkingLed` from
-  `iroh-provision-esp-idf`; the XIAO ESP32-C5's user LED is GPIO27, active low.
+- The BOOT pin (GPIO28) and the user LED (GPIO27, active low) are set in
+  `main.rs`. Other boards differ. A board with an addressable RGB LED instead
+  implements the `Indicator` trait for it.
 
 ## The page
 

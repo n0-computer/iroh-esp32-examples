@@ -1570,7 +1570,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "provisioning-esp32-c61-psram"
+name = "provisioning-esp32-c5-psram"
 version = "0.1.0"
 dependencies = [
  "embuild",

@@ -3,12 +3,17 @@ use std::net::Ipv4Addr;
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::modem::WifiModemPeripheral;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
-use esp_idf_svc::sys::EspError;
+use esp_idf_svc::sys::{
+    esp, esp_coex_prefer_t_ESP_COEX_PREFER_WIFI, esp_coex_preference_set, EspError,
+};
 use esp_idf_svc::wifi::config::ScanConfig;
 use esp_idf_svc::wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi};
 use iroh_provision::device::{AccessPoint, Wifi};
 use iroh_provision::{Failure, Network};
 use log::warn;
+
+/// How long to wait for the access point, and then for an address.
+const JOIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// The WiFi driver in station mode, started.
 pub struct StationWifi(BlockingWifi<EspWifi<'static>>);
@@ -31,6 +36,12 @@ impl StationWifi {
             ..Default::default()
         }))?;
         wifi.start()?;
+        // With Bluetooth compiled in, the coexistence arbiter keeps radio time
+        // for it even when it isn't running, and WiFi then misses much of
+        // what other devices on the LAN send: no ping, no direct connection,
+        // only traffic the device asked for. Give WiFi the radio. BLE still
+        // works, it's only used while provisioning.
+        esp!(unsafe { esp_coex_preference_set(esp_coex_prefer_t_ESP_COEX_PREFER_WIFI) })?;
         Ok(Self(wifi))
     }
 }
@@ -88,8 +99,25 @@ impl Wifi for StationWifi {
         self.0
             .set_configuration(&config)
             .map_err(|_| Failure::WifiConnect)?;
-        self.0.connect().map_err(|_| Failure::WifiConnect)?;
-        if self.0.wait_netif_up().is_err() {
+        // Not BlockingWifi::connect(): its 15 s timeout is too short when
+        // BLE shares the radio, and on dual-band chips the scan alone takes
+        // a while.
+        self.0
+            .wifi_mut()
+            .connect()
+            .map_err(|_| Failure::WifiConnect)?;
+        let wifi = &self.0;
+        if wifi
+            .wifi_wait_while(|| wifi.is_connected().map(|c| !c), Some(JOIN_TIMEOUT))
+            .is_err()
+        {
+            let _ = self.0.disconnect();
+            return Err(Failure::WifiConnect);
+        }
+        if wifi
+            .ip_wait_while(|| wifi.is_up().map(|up| !up), Some(JOIN_TIMEOUT))
+            .is_err()
+        {
             let _ = self.0.disconnect();
             return Err(Failure::NoIp);
         }

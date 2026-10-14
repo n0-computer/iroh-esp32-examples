@@ -1,4 +1,5 @@
-//! WiFi provisioning over BLE for an ESP32-C61, with the credentials encrypted
+//! WiFi provisioning over BLE for an ESP32-C5 (Seeed Studio XIAO ESP32-C5), with
+//! the credentials encrypted
 //! to the device's iroh identity. The logic is in `iroh-provision` (device
 //! side) and `iroh-provision-esp-idf` (NimBLE, NVS, WiFi); see `../web` and
 //! `iroh-provision-ble` for clients.
@@ -20,7 +21,8 @@ use esp_idf_svc::hal::peripherals::Peripherals;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use iroh_provision::{device, DeviceInfo};
 use iroh_provision_esp_idf::{
-    fill_random, join_or_provision, keep_connected, watch_reset_button, NvsStorage, StationWifi,
+    fill_random, join_or_provision, keep_connected, watch_reset_button, BlinkingLed, NvsStorage,
+    StationWifi,
 };
 use log::info;
 
@@ -28,8 +30,6 @@ use log::info;
 /// `demo-2`, ...), and it's the start of the BLE name. A CO2 monitor would say
 /// `co2`, a lamp `lamp`.
 const KIND: &str = "demo";
-
-mod rgb_led;
 
 fn main() {
     // It is necessary to call this function once. Otherwise, some patches to the runtime
@@ -43,8 +43,8 @@ fn main() {
     let sys_loop = EspSystemEventLoop::take().expect("Failed to take event loop");
     let nvs_partition = EspDefaultNvsPartition::take().expect("Failed to take NVS partition");
 
-    // The ESP32-C61 DevKit's BOOT button is GPIO9. (XIAO ESP32-C5: GPIO28.)
-    watch_reset_button(peripherals.pins.gpio9.into(), nvs_partition.clone());
+    // The XIAO ESP32-C5's BOOT button is GPIO28.
+    watch_reset_button(peripherals.pins.gpio28.into(), nvs_partition.clone());
 
     let mut wifi = StationWifi::start(peripherals.modem, sys_loop, nvs_partition.clone())
         .expect("Failed to start WiFi");
@@ -60,13 +60,10 @@ fn main() {
         info!("Name: {name:?}");
     }
 
-    // The RGB LED (GPIO8) shows the state: blinking yellow while waiting for
-    // provisioning, yellow/green while joining WiFi, green once joined. On a
-    // board with a plain LED, use the library's `BlinkingLed` instead, e.g. the
-    // XIAO ESP32-C5: `BlinkingLed::new(peripherals.pins.gpio27.into(), true)`
-    // (active low).
-    let mut led = rgb_led::RgbIndicator::new(peripherals.spi2, peripherals.pins.gpio8)
-        .expect("Failed to set up the LED");
+    // The user LED (GPIO27, active low) shows the state: blinking slowly while
+    // waiting for provisioning, fast while joining WiFi, off once joined.
+    let mut led =
+        BlinkingLed::new(peripherals.pins.gpio27.into(), true).expect("Failed to set up the LED");
     let info = DeviceInfo { kind: KIND.into() };
     let joined = join_or_provision(&mut storage, &mut wifi, &secret, &info, &mut led)
         .expect("Failed to provision");
@@ -75,7 +72,7 @@ fn main() {
         joined.ssid, joined.ip
     );
     // From now on, rejoin whichever stored network is there if the connection
-    // drops (LED yellow/green meanwhile).
+    // drops (LED blinking fast meanwhile).
     keep_connected(wifi, &mut storage, led);
     loop {
         std::thread::sleep(Duration::from_secs(3600));

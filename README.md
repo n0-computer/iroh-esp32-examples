@@ -46,7 +46,7 @@ Each keeps the largest configuration that runs *reliably* on that board:
 
 - [`provisioning/`](provisioning/README.md) — WiFi provisioning over BLE from a
   web page, with the credentials encrypted to the device's iroh endpoint id.
-  ESP32-C61 with PSRAM; stops once WiFi is up, before binding an endpoint.
+  XIAO ESP32-C5; stops once WiFi is up, before binding an endpoint.
 
 ## Clients
 
