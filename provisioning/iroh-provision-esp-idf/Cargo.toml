@@ -1,0 +1,18 @@
+[package]
+name = "iroh-provision-esp-idf"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "ESP-IDF device side for iroh-provision: NimBLE GATT service, NVS storage, WiFi"
+
+[dependencies]
+iroh-provision = { path = "../iroh-provision", features = ["device"] }
+log = "0.4"
+n0-error = "1.0.1"
+# esp32-nimble 0.13 requires esp-idf-svc 0.53. Apps must use the same versions:
+# only one esp-idf-sys can be in a build.
+esp-idf-svc = "0.53"
+esp32-nimble = "0.13"
+
+[build-dependencies]
+embuild = "0.33"

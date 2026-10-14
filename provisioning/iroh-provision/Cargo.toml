@@ -1,0 +1,31 @@
+[package]
+name = "iroh-provision"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Provision WiFi credentials to iroh devices, encrypted to their endpoint id"
+
+[features]
+default = []
+# Client side: sealing needs an RNG for the HPKE ephemeral key and the pairing
+# secret; plus the Session workflow over a Transport.
+client = ["hpke/getrandom", "dep:getrandom"]
+# Device side: identity, storage, joining networks, the provisioning loop.
+device = ["dep:log"]
+
+[dependencies]
+# The endpoint's own key types. The ed25519 keys underneath (ed25519-dalek) also
+# provide the X25519 conversion HPKE needs.
+iroh-base = { version = "1.3", default-features = false, features = ["key"] }
+hpke = { version = "0.14", default-features = false, features = ["x25519", "chacha", "alloc"] }
+# All wire and storage formats.
+postcard = { version = "1.1.1", default-features = false, features = ["alloc"] }
+serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
+# Pairing tickets.
+data-encoding = "2"
+n0-error = "1.0.1"
+getrandom = { version = "0.4", optional = true }
+log = { version = "0.4", optional = true }
+
+[dev-dependencies]
+futures = { version = "0.3", default-features = false, features = ["std", "executor"] }

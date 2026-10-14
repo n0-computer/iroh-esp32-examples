@@ -1,0 +1,30 @@
+[package]
+name = "noq-interop-test"
+version = "0.1.0"
+authors = ["Ruediger Klaehn <rklaehn@protonmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Host-side stand-in for the ESP32: compiles the firmware's noq server modules
+# (`../noq-esp32-c6/src/{echo,tls,keys,quic_crypto_provider}.rs`) unchanged, with the
+# same rustls-rustcrypto provider, and dials them from a real iroh endpoint.
+
+[dependencies]
+log = "0.4"
+tokio = { version = "1", features = ["rt", "net", "time"] }
+noq = { version = "1.3.0", default-features = false, features = ["rustls", "runtime-tokio"] }
+rustls = { version = "0.23", default-features = false, features = ["std"] }
+rustls-rustcrypto = { git = "https://github.com/n0-computer/rustls-rustcrypto", branch = "feature-flag-algorithms-v0.0.2", default-features = false, features = ["std"] }
+iroh-base = { version = "1.3.0", default-features = false, features = ["key"] }
+iroh-tickets = "1.0.0"
+hmac = "0.13"
+sha2 = { version = "0.11", default-features = false }
+getrandom = "0.4"
+aes = "0.8"
+aes-gcm = "0.10"
+
+[dev-dependencies]
+iroh = "1.3.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

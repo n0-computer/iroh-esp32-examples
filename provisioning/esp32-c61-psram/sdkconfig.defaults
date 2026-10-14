@@ -1,0 +1,49 @@
+# Flash size — pin it explicitly. ESP-IDF defaults to 2 MB; if the board is larger
+# the auto-generated partition table can land wrong (MMU alignment assert at boot).
+# 4 MB is safe on the 8 MB board: under-reporting is fine, over-reporting is not.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# No iroh yet, so the main task needs nowhere near the 96 KB of the full relay
+# build. HPKE open + ed25519 + WiFi setup run here. This stack is internal SRAM.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
+
+# BLE via NimBLE (what esp32-nimble wraps), not Bluedroid.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_BLE_ENABLED=y
+CONFIG_BT_BLUEDROID_ENABLED=n
+CONFIG_BT_NIMBLE_ENABLED=y
+# One provisioning client at a time.
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+# Put the NimBLE host's heap in PSRAM; internal SRAM is the scarce resource on the
+# C61 and the iroh endpoint will want it later.
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+
+# PSRAM. The gate is the chip-independent CONFIG_SPIRAM symbol; the C61's PSRAM is
+# QUAD (the default), so no MODE_OCT. See server-esp32-c61-psram for details.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_USE_MALLOC=y
+
+# We use rustls (later, for iroh), not mbedtls - disable to save RAM and flash
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=n
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=n
+CONFIG_MBEDTLS_TLS_ENABLED=n
+
+# Small WiFi buffers, as on the C61 server: no throughput needed here.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER=y
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+
+CONFIG_LWIP_IPV6=n
+
+# Use the ROM's nano printf/scanf: smaller formatting code and less stack.
+CONFIG_NEWLIB_NANO_FORMAT=y
+
+# ESP-IDF v5.5 turned colored logs off by default. Turn them back on.
+CONFIG_LOG_COLORS=y
+
+# Detect stack overflow via hardware watchpoint (uses 1 of 2 debug watchpoints)
+CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK=y

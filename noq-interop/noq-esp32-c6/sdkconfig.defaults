@@ -1,0 +1,84 @@
+# Flash size — pin it explicitly. ESP-IDF defaults to 2 MB; if the board is larger
+# the auto-generated partition table can land wrong, which shows up as an MMU
+# alignment assert in `mmu_hal_map_region` while loading the partition table at
+# boot. 4 MB is safe even on an 8 MB board (under-reporting is fine; over-reporting
+# is not). Bump to "8MB" only after confirming with `espflash board-info`.
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Tokio current_thread runtime runs all async tasks on this single stack.
+# RISC-V uses more stack than Xtensa (no register windows → more spilling): the C6
+# measured ~38KB high-water (2876 free of 40960) where the LX6 used only ~34.5KB.
+# So bump to 48KB here — that restores a healthy ~10KB margin on the C6. (The LX6/S3
+# stay at 40960; this larger value is a RISC-V-specific divergence.) If a deeper path
+# ever exceeds this, the stack-overflow watchpoint (below) traps it cleanly.
+# noq-only: 48KB (the iroh C6 value) OVERFLOWED here, in X25519 keygen while
+# handling the first ClientHello (rustls-rustcrypto -> curve25519-dalek mul_base).
+# 64KB until the real peak is measured — the `[stack free min=…]` log on each
+# accept/close shows the high-water; trim to peak + ~10KB. This build uses far less
+# heap than iroh, so the C6 can afford it.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=65536
+
+# Use this to set FreeRTOS kernel tick frequency to 1000 Hz (100 Hz by default).
+# This allows to use 1 ms granularity for thread sleeps (10 ms by default).
+#CONFIG_FREERTOS_HZ=1000
+
+# We use rustls, not mbedtls - disable to save RAM and flash
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=n
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=n
+CONFIG_MBEDTLS_TLS_ENABLED=n
+
+# NOTE: no PSRAM toggle here. The ESP32-C6 has no PSRAM interface, so the
+# `CONFIG_ESP32_SPIRAM_*` / `CONFIG_SPIRAM_*` symbols simply don't exist for this
+# chip — heap and all task stacks must fit in the ~512 KB internal SRAM, which is
+# exactly what the stack/buffer cuts above and below are sized for.
+
+# WiFi buffers — CONFIG_ESP_WIFI_* are the canonical, chip-independent symbols;
+# the CONFIG_ESP32_WIFI_* names are esp32-only aliases the S3 silently ignores
+# (→ defaults → OOM). Static TX buffers avoid dynamic internal-SRAM allocation.
+#
+# AGGRESSIVE (bare-LX6 only): static buffers are PRE-ALLOCATED (~1.6 KB each), so
+# they hit the idle baseline directly — unlike the dynamic pool, which only grows
+# under load. This is the biggest remaining baseline lever. Cut to the functional
+# floor and let the deterministic ESP silicon prove it out; the S3/PSRAM targets
+# keep the conservative defaults. Static RX 10→4 (~9.6 KB) + static TX 8→4
+# (~6.4 KB) ≈ 16 KB reclaimed. Cost: lower WiFi throughput / more retransmits —
+# irrelevant for an echo.
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=4
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER=y
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=4
+# Dynamic RX pool (default 32 × ~1.6 KB) — allocated on demand, so this caps the
+# peak rather than the baseline. Kept at 8 as a safe-ish ceiling.
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=8
+# Disable AMPDU (block-ack aggregation) — frees the RX reorder buffers; the
+# throughput cost is irrelevant for an echo.
+CONFIG_ESP_WIFI_AMPDU_RX_ENABLED=n
+CONFIG_ESP_WIFI_AMPDU_TX_ENABLED=n
+
+# no-psram: shrink lwIP buffers. There is NO TCP traffic (QUIC is UDP, and the
+# noq-only build doesn't even do SNTP or DNS) — TCP windows never allocate, but
+# we floor them for hygiene. The real reclaim is the static pools (sockets/PCBs/
+# mboxes), which cost upfront heap. UDP mbox kept moderate so QUIC rx bursts
+# aren't dropped. (Was 32/8192/8192/32/4096/16/16 for the PSRAM relay-probe era.)
+CONFIG_LWIP_UDP_RECVMBOX_SIZE=12
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=2880
+CONFIG_LWIP_TCP_WND_DEFAULT=2880
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=8
+CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=4096
+# Concurrent UDP needs are small: just the one QUIC socket (plus DHCP). 6 each
+# leaves margin; the static pools cost upfront heap.
+CONFIG_LWIP_MAX_UDP_PCBS=6
+CONFIG_LWIP_MAX_SOCKETS=6
+
+# Nuke IPv6: the network is IPv4-only (typical home / factory WLAN). Measured RAM
+# saving is small (~2KB free heap, A/B: 170736 off vs 168624 on; largest_8bit
+# unchanged), but it reclaims ~24KB of flash — worth it on the 4MB LX6 (app
+# partition was ~92% full) and matches the IPv4-only reality.
+CONFIG_LWIP_IPV6=n
+
+# Use the ROM's nano printf/scanf: smaller formatting code AND a lower stack
+# footprint on the format path (which also helps the main-task high-water).
+CONFIG_NEWLIB_NANO_FORMAT=y
+
+# Detect stack overflow via hardware watchpoint (uses 1 of 2 debug watchpoints)
+CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK=y
