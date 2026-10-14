@@ -42,6 +42,12 @@ Each keeps the largest configuration that runs *reliably* on that board:
   raw-public-key TLS profile, so iroh endpoints can dial it via a long ticket.
   Its app image is 1.69 MiB.
 
+## WiFi provisioning
+
+- [`provisioning/`](provisioning/README.md) — WiFi provisioning over BLE from a
+  web page, with the credentials encrypted to the device's iroh endpoint id.
+  ESP32-C61 with PSRAM; stops once WiFi is up, before binding an endpoint.
+
 ## Clients
 
 - [`client/`](client/README.md) — desktop CLI client.

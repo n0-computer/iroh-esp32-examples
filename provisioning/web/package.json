@@ -1,0 +1,11 @@
+{
+  "name": "provisioning-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser client for BLE WiFi provisioning of an iroh ESP32",
+  "scripts": {
+    "build": "cargo build --target wasm32-unknown-unknown --release && wasm-bindgen ./target/wasm32-unknown-unknown/release/provisioning_web.wasm --out-dir public/wasm --target web",
+    "serve": "python3 -m http.server 8080 --directory public"
+  },
+  "license": "MIT OR Apache-2.0"
+}
