@@ -22,7 +22,7 @@ for name in args.examples or sorted(p.name for p in root.glob('server-esp32*')):
     chip = config['env']['MCU']
     packages = tomllib.loads((project / 'Cargo.lock').read_text())['package']
     iroh = next(p for p in packages if p['name'] == 'iroh')
-    assert iroh['version'] == '1.2.0' and iroh['source'].startswith('registry+'), iroh
+    assert iroh['version'] == '1.3.0' and iroh['source'].startswith('registry+'), iroh
     assert not any(p['name'].startswith('hickory-') for p in packages)
     assert not any('github.com/n0-computer/iroh?' in p.get('source', '') for p in packages)
     elf = project / 'target' / target / 'release' / name
